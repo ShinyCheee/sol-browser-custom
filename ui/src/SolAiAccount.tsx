@@ -4,8 +4,10 @@ import { t } from './i18n';
 import SolSelect from './SolSelect';
 import { aiError, usagePage } from './solAiMessages';
 import { ThinkingShimmer } from '@/components/agents/loading-states/thinking-shimmer';
+import SolVoiceSettings from './SolVoiceSettings';
+import type { VoiceState } from './solVoiceState';
 
-export type SolAiState = { connected:boolean; ready:boolean; email:string; signingIn:boolean; error:string|null; isPrivate:boolean; tone:number; length:number; categories:boolean; categorizing:boolean; categoriesError:string|null; categoriesUpdated:number|null; categoriesClassified:number; categoriesPending:number; categoriesBudget:number; models:{slug:string;name:string}[]; model:string; autoApproveActions?:boolean };
+export type SolAiState = { voice?:VoiceState; connected:boolean; ready:boolean; email:string; signingIn:boolean; error:string|null; isPrivate:boolean; tone:number; length:number; categories:boolean; categorizing:boolean; categoriesError:string|null; categoriesUpdated:number|null; categoriesClassified:number; categoriesPending:number; categoriesBudget:number; models:{slug:string;name:string}[]; model:string; autoApproveActions?:boolean };
 
 // Compte ChatGPT de Sol AI, suivant les règles d’interface d’OpenAI : bouton « Continuer avec ChatGPT », badge « Connecté »,
 // mention du forfait utilisé et lien « Gérer l’usage ».
@@ -32,6 +34,7 @@ export default function SolAiAccount({ ai }: { ai: SolAiState }) {
         <span className={`switch${ai.autoApproveActions?' on':''}`} aria-hidden="true"/>
       </button>}
     {ai.ready && <>
+      <SolVoiceSettings state={ai.voice} />
       <button className="setting-row" role="switch" aria-checked={ai.categories} onClick={()=>send({type:'settings.set',id:'aiCategories',index:ai.categories?0:1})}>
         <span className="setting-text"><span className="row-title">{t('Classer mes favoris et mon historique','Sort my bookmarks and history')}</span>
           <span className="row-sub">{t('Sol AI range vos sites par catégorie sur la page d’accueil. Une grande bibliothèque est classée par lots sur quelques jours, puis seuls les nouveaux sites sont envoyés. Seuls le domaine et un titre partent chez OpenAI, jamais les adresses complètes.','Sol AI sorts your sites into categories on the start page. A large library is sorted in batches over a few days, then only new sites are sent. Only the domain and a title go to OpenAI, never full addresses.')}</span></span>

@@ -38,7 +38,7 @@ public sealed partial class BrowserController
     private void OpenTopicGroup(string name)
     {
         if (AppPaths.Private || CategoryViews().FirstOrDefault(c => c.Name == name) is not { } topic) return;
-        var tabs = topic.Links.Take(TopicGroupSize).Select(l => Open(l.Url, activate: false)).ToList();
+        var tabs = topic.Links.Take(TopicGroupSize).Select((l, i) => Open(l.Url, activate: false, asleep: i > 0 && _settings.MemorySaver)).ToList();
         if (tabs.Count == 0 || _tabs.CreateGroup(tabs[0].Id, name) is not { } group) return;
         foreach (var tab in tabs.Skip(1)) _tabs.AddToGroup(tab.Id, group.Id);
         Activate(tabs[0].Id);

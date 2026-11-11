@@ -40,23 +40,23 @@ export async function sidebarHost(executable,{serve=null,downloads=false,capture
     throw new Error(`Timed out: ${label}`);
   };
   const targets = () => fetch(`http://127.0.0.1:${port}/json/list`).then(r=>r.json()).catch(()=>[]);
-  const connect = async (hash,targetId=null) => {
+  const connect = async (hash,targetId=null,timeout=30000) => {
     if(hash==='#sidebar')hash='';
     const url=hash.includes('://')?hash:`https://ui.navigateur/index.html${hash}`;
-    const target = await wait(async()=> (await targets()).find(t=>t.url === url&&(!targetId||t.id===targetId)), `target ${hash}`);
+    const target = await wait(async()=> (await targets()).find(t=>t.url === url&&(!targetId||t.id===targetId)), `target ${hash}`,timeout);
     const ws = new WebSocket(target.webSocketDebuggerUrl); await once(ws,'open'); connections.push(ws);
     let seq=0; const pending=new Map(),listeners=new Map();
     ws.addEventListener('message', e=> { const m=JSON.parse(e.data); const p=pending.get(m.id); if(p) {pending.delete(m.id);clearTimeout(p.timer);if(m.error)p.reject(new Error(m.error.message));else p.resolve(m.result);} else if(m.method)for(const listener of listeners.get(m.method)??[])listener(m.params); });
     const call = (method,params={})=>new Promise((resolve,reject)=>{const id=++seq;const timer=setTimeout(()=>{pending.delete(id);reject(new Error(`CDP timeout ${method}`));},10000);pending.set(id,{resolve,reject,timer});ws.send(JSON.stringify({id,method,params}));});
     const evaluate = async expression=> {const result=await call('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true,userGesture:true});if(result.exceptionDetails)throw new Error(JSON.stringify(result.exceptionDetails));return result.result.value;};
     const on=(method,listener)=>{const set=listeners.get(method)??new Set();set.add(listener);listeners.set(method,set);return()=>set.delete(listener)};
-    return {call,evaluate,on};
+    return {call,evaluate,on,disconnect:async()=>{if(ws.readyState===WebSocket.CLOSED)return;const closed=once(ws,'close');ws.close();await closed;}};
   };
-  const launch = async(height=950,width=1000)=> {
+  const launch = async(height=950,width=1000,startupTimeout=30000)=> {
     failure='';
     app = spawn(resolve(executable),[`--profile=${profileName}`,`--bounds=${visible?'100,80':'-9000,-9000'},${width},${height}`,...(privateMode?['--private']:[])],{windowsHide:true,env,stdio:['ignore','pipe','pipe']});
     app.stderr.on('data',data=>failure+=data);app.stdout.on('data',data=>failure+=data);
-    const sidebar=await connect('#sidebar');
+    const sidebar=await connect('#sidebar',null,startupTimeout);
     await wait(()=>sidebar.evaluate('!!document.querySelector(".sidebar-card")').catch(()=>false),'sidebar ready');
     await sidebar.evaluate(`chrome.webview.addEventListener('message',e=>{if(e.data.tabs)window.__sidebarState=e.data});chrome.webview.postMessage(JSON.stringify({type:'ui.ready'}))`);
     await wait(()=>sidebar.evaluate('window.__sidebarState?.tabs.length'), 'sidebar state');

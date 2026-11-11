@@ -61,7 +61,16 @@ public sealed partial class PageHost
         await ConfigureFanAsync(core);
         StartSpelling();
         if (!settings.MemorySaver) Wake(id, core);
-        else if (_hiddenSince.ContainsKey(id) && !core.IsSuspended) core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low;
+        else if (_hiddenSince.ContainsKey(id) && !core.IsSuspended)
+        {
+            core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low;
+            if (_saver is null)
+            {
+                _saver = new DispatcherTimer { Interval = SaverTest ? TimeSpan.FromSeconds(2) : TimeSpan.FromSeconds(15) };
+                _saver.Tick += (_, _) => SaveMemory(DateTime.UtcNow);
+                _saver.Start();
+            }
+        }
         if (!settings.MemorySaver && _hiddenSince.ContainsKey(id)) _hiddenSince[id] = DateTime.UtcNow;
         var iCloud = (await core.Profile.GetBrowserExtensionsAsync()).Any(e => e.IsEnabled && e.Id is "pejdijmoenmkgeppbflobdenhhabjlaj" or "mfbcdcnpokpoajjciilocoachedjkima");
         core.Settings.IsPasswordAutosaveEnabled = settings.SavePasswords && !IsPrivate(id) && !iCloud;

@@ -11,3 +11,4 @@ landing/
 .neon
 .env
 .env.*
+tools/voice-worker/__pycache__/

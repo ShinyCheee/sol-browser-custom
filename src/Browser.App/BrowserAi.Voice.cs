@@ -5,59 +5,75 @@ namespace Browser.App;
 
 public sealed partial class BrowserController
 {
-    private WindowsVoice? _voice;
+    private SolVoiceSession? _voice;
     private bool _voiceOpen, _voiceTurn;
     private string? _voiceApproval;
+    private object[] _voiceDevices = [];
+    private Task? _voicePreparation;
+    private string _voiceSettingsStamp = "";
 
     private object VoiceState() => new
     {
-        available = SolAiPermissions.VoiceAvailable,
-        open = SolAiPermissions.VoiceAvailable && _voiceOpen && AiReady, provider = "windows",
-        mode = _voice?.Mode is "listening" or "speaking" ? _voice.Mode : _voiceTurn && _chatBusy ? _chatTrace?.Pending is not null ? "approval" : "thinking" : _voice?.Mode ?? "idle",
+        available = SolAiPermissions.VoiceAvailable, supported = SolVoiceWorker.Available,
+        open = _voiceOpen && AiReady, provider = "parakeet",
+        mode = _voiceTurn && _chatTrace?.Pending is not null && _voice?.Mode != "listening" ? "approval" : _voiceStarting && _voice?.Mode == "idle" ? "checking" : _voice?.Mode ?? "idle",
         level = _voice?.Level ?? 0, text = _voice?.Text ?? "", error = _voice?.Error,
+        ready = _voice?.AssetsReady ?? false, progress = _voice?.Progress ?? 0,
+        conversation = _voice?.Conversation ?? false, readAloud = _voice?.ReadAloud ?? _settings.SolVoiceReadAloud,
+        device = _voice?.Device ?? _settings.SolVoiceDevice, devices = _voiceDevices, seconds = _voice?.Seconds ?? 0,
+        downloadMiB = (int)Math.Ceiling(VoiceAssetStore.ForLanguage(Language.Current).Sum(a => a.Bytes) / 1048576d),
     };
     private void PublishVoice()
     {
         if (!_closingWindow && Chat is not null) Chat.Post(JsonSerializer.Serialize(new { voice = VoiceState() }));
+        var stamp = $"{_voice?.Mode}|{_voice?.AssetsReady}|{Math.Round((_voice?.Progress ?? 0) * 100)}|{_voice?.Conversation}|{_voice?.ReadAloud}|{_voice?.Device}|{_voice?.Error}";
+        if (_settingsOpen && !_closingWindow && stamp != _voiceSettingsStamp)
+        { _voiceSettingsStamp = stamp; _popup.Post(SettingsJson()); }
     }
     private bool VoiceCommand(Command c)
     {
         if (!c.Type.StartsWith("voice.", StringComparison.Ordinal)) return false;
         if (c.Type == "voice.close") { CloseVoice(); return true; }
+        if (c.Type == "voice.toggle") { _ = ToggleVoiceAsync(); return true; }
         if (!SolAiPermissions.VoiceAvailable) { CloseVoice(); return true; }
-        if (!AiReady || Chat?.IsOpen != true) return true;
+        if (!AiReady) return true;
+        if (c.Type == "voice.configure") { EnsureVoice(); PublishVoice(); return true; }
         if (c.Type == "voice.settings")
         {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("ms-settings:speech") { UseShellExecute = true });
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("ms-settings:privacy-microphone") { UseShellExecute = true });
             return true;
         }
-        if (c.Type == "voice.stop") { _voiceTurn = false; _voiceApproval = null; _voice?.Stop(); PublishVoice(); return true; }
-        if (c.Type is not ("voice.open" or "voice.listen")) return true;
-        _voiceOpen = true;
-        if (_voice is null)
+        if (c.Type == "voice.stop") { if (_voiceTurn) CancelChat(); _voiceTurn = false; _voiceApproval = null; _voice?.Stop(); PublishVoice(); return true; }
+        if (c.Type == "voice.cancelInstall") { _voice?.CancelInstall(); return true; }
+        if (c.Type == "voice.install") { if (SolVoiceWorker.Available) _ = _voice?.InstallAsync(); return true; }
+        if (c.Type == "voice.finish") { _voice?.FinishCapture(); return true; }
+        if (c.Type == "voice.interrupt") { _ = InterruptVoiceAsync(); return true; }
+        if (c.Type == "voice.options")
         {
-            _voice = new WindowsVoice(action => _window.DispatcherQueue.TryEnqueue(() => action()));
-            _voice.Changed += PublishVoice;
-            _voice.Recognized += text =>
+            if (c.Id == "readAloud" && c.Index is 0 or 1)
             {
-                if (!AiReady || !_voiceOpen || Chat?.IsOpen != true) return;
-                if (_voiceApproval is { } approval)
-                {
-                    _voiceApproval = null;
-                    if (_chatTrace?.Pending is not { } pending || pending.Id != approval) return;
-                    if (SolVoiceText.Approval(text) is { } allow) AnswerApproval(new("ai.approve", Id: approval, Index: allow ? 1 : 0));
-                    PublishVoice(); return;
-                }
-                if (_chatBusy) return;
-                _voiceTurn = true; _ = SendChatAsync(text);
-            };
+                _settings.SolVoiceReadAloud = c.Index == 1;
+                if (_voice is not null) _voice.ReadAloud = _settings.SolVoiceReadAloud;
+                JsonFileStore.Save(AppPaths.Settings, _settings);
+            }
+            if (c.Id == "device" && c.Index is >= -1 and < 100)
+            {
+                _settings.SolVoiceDevice = c.Index.Value;
+                if (_voice is not null) _ = _voice.ChangeDeviceAsync(c.Index.Value, Language.Current);
+                JsonFileStore.Save(AppPaths.Settings, _settings);
+            }
+            PublishVoice(); return true;
         }
+        if (c.Type is not ("voice.open" or "voice.listen")) return true;
+        if (Chat?.IsOpen != true) return true;
+        _voiceOpen = true;
+        EnsureVoice();
         if (c.Type == "voice.listen")
         {
             if (_chatBusy && _chatTrace?.Pending is null) return true;
             if (!_chatBusy) _voiceTurn = false;
             _voiceApproval = _chatTrace?.Pending?.Id;
-            _voice.Listen(Language.Current, approvalOnly: _voiceApproval is not null);
+            if (SolVoiceWorker.Available) _ = _voice!.ListenAsync(Language.Current);
         }
         PublishVoice(); return true;
     }
@@ -65,19 +81,30 @@ public sealed partial class BrowserController
     {
         if (!_voiceTurn || !_voiceOpen || !AiReady || Chat?.IsOpen != true) return;
         _voiceTurn = false;
-        if (success) _voice?.Speak(SolVoiceText.ForSpeech(answer), Language.Current);
+        if (_voice is { } voice) _ = voice.FinishResponseAsync(success);
         PublishVoice();
     }
     private void SpeakVoiceApproval(string label)
     {
         if (_voiceOpen && _voiceTurn && AiReady)
-            _voice?.Speak(label + ". " + T("Consultez les détails dans la discussion. Pour répondre à voix haute, appuyez sur Répondre oui ou non.",
-                "Review the details in the conversation. To answer aloud, press Answer yes or no."), Language.Current);
+            _voice?.SpeakNotice(label + ". " + T("Consultez les détails et confirmez l’action dans la discussion.",
+                "Review the details and confirm the action in the conversation."));
     }
-    private void CloseVoice()
+    private async Task InterruptVoiceAsync()
     {
+        var voice = _voice;
+        _voiceTurn = false; _voiceApproval = null; CancelChat();
+        if (voice is not null) await voice.InterruptAndListenAsync(Language.Current, () => _chatBusy,
+            () => _voiceOpen && AiReady && _voice == voice && Chat?.IsOpen == true && SolVoiceWorker.Available);
+    }
+    private void CloseVoice(bool release = true)
+    {
+        DebugLog.Write("voice.close " + release);
         _voiceOpen = false; _voiceTurn = false; _voiceApproval = null;
-        _voice?.Dispose(); _voice = null;
+        _voiceActivation++; _voiceStarting = false;
+        if (release) { _voicePreparation = null; _voice?.Dispose(); _voice = null; }
+        else _voice?.Stop();
+        DebugLog.Write("voice.closed");
         PublishVoice();
     }
 }

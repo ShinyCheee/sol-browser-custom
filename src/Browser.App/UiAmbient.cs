@@ -37,14 +37,21 @@ public sealed partial class UiBridge
             } catch { /* vidéo illisible : on prend les couleurs de la page */ }
           }
           const out = [];
-          const colors = document.createElement('canvas'); colors.width = colors.height = 1;
-          const color = colors.getContext('2d', { willReadFrequently: true });
+          const color = window.__solColorCtx || (window.__solColorCtx = (() => {
+            const c = document.createElement('canvas'); c.width = c.height = 1;
+            return c.getContext('2d', { willReadFrequently: true });
+          })());
           if (!color) return null;
           for (const x of [0.25, 0.5, 0.75]) for (const y of [0.12, 0.5, 0.88]) {
             let el = document.elementFromPoint(innerWidth * x, innerHeight * y);
             for (let depth = 0; el && depth < 12; el = el.parentElement, depth++) {
               const css = getComputedStyle(el).backgroundColor;
               if (!CSS.supports('color', css)) continue;
+              const m = css.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+              if (m) {
+                if ((m[4] === undefined ? 1 : +m[4]) > 0.5) { out.push(+m[1], +m[2], +m[3], 255); break; }
+                continue;
+              }
               color.clearRect(0, 0, 1, 1); color.fillStyle = css; color.fillRect(0, 0, 1, 1);
               const pixel = color.getImageData(0, 0, 1, 1).data;
               if (pixel[3] > 127) { out.push(pixel[0], pixel[1], pixel[2], 255); break; }

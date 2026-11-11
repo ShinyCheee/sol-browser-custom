@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { Activity, lazy, Suspense, useEffect, useState } from 'react';
 import { EyeTracker } from '@/components/bencho/EyeTracker';
 import { onMessage, send } from './bridge';
 import { t, useLang } from './i18n';
@@ -7,9 +7,10 @@ import { aiError } from './solAiMessages';
 import { Message, MessageBubble, MessageBubbleContent, MessageContent, MessageScroller, MessageTyping } from '@/components/agents/message';
 import { PromptInput } from '@/components/agents/prompt-input';
 import { CornerActions } from '@/components/bencho/CornerActions';
-import { Copy, Mic, NotebookPen } from 'lucide-react';
+import { Copy, NotebookPen } from 'lucide-react';
 import SolAiTrace, { type AgentState } from './SolAiTrace';
 import type { VoiceState } from './SolVoice';
+import { voiceError } from './solVoiceState';
 import SolChatAttachments, { AttachmentActions, readAttachment, type ChatAttachment } from './SolChatAttachments';
 import './chat.css';
 
@@ -27,27 +28,35 @@ export default function SolChat() {
   useLang();
   const [state, setState] = useState<ChatState>({ chat: true, ready: false, account: '', busy: false, error: null, messages: [] });
   const [draft, setDraft] = useState('');
+  const [visible, setVisible] = useState(true);
   useEffect(() => {
     const off = onMessage(data => {
+      const visibility = data as {event?:string;open?:boolean};
+      if(visibility.event==='chat.visibility'){setVisible(visibility.open===true);return;}
       const next = data as ChatState;
       if (next?.chat) setState(next);
       // Le niveau audio est suivi dans SolVoice pour ne pas recalculer tout l'historique à chaque syllabe.
-      else if (next?.voice) setState(current => current.voice?.open === next.voice!.open ? current : { ...current, voice: next.voice });
+      else if (next?.voice) setState(current => current.voice?.open === next.voice!.open && current.voice?.readAloud === next.voice!.readAloud && current.voice?.error === next.voice!.error ? current : { ...current, voice: next.voice });
     });
     send({ type: 'chat.ready' });
     return off;
   }, []);
   // Capture collée (Win+Maj+S puis Ctrl+V) ou fichiers déposés sur le panneau.
   const attach = (files: Iterable<File>) => { for (const file of files) readAttachment(file); };
-  return <div className="sol-chat" data-eyt-frame
+  // Keep explicit action approvals readable; ordinary voice interaction shows only the orb.
+  const action = state.agent?.steps.slice().reverse().find(step => step.status === 'active')?.label;
+  if (state.ready && state.voice?.open && state.voice.readAloud && !state.voice.error && (!state.error || state.error === 'cancelled') && !state.agent?.approval) return <Activity mode={visible?'visible':'hidden'}><div className="sol-chat sol-chat-voice-only">
+    <Suspense fallback={null}><SolVoice state={state.voice} busy={state.busy} approval={false} action={action} /></Suspense>
+  </div></Activity>;
+  return <Activity mode={visible?'visible':'hidden'}><div className="sol-chat" data-eyt-frame
     onPaste={e => { if (state.ready && e.clipboardData.files.length) { e.preventDefault(); attach(e.clipboardData.files); } }}
     onDragOver={e => { if (state.ready && e.dataTransfer.types.includes('Files')) e.preventDefault(); }}
     onDrop={e => { e.preventDefault(); if (state.ready) attach(e.dataTransfer.files); }}>
     <header className="sol-chat-head">
+      {state.voice?.open && <div className="sol-voice-inline"><Suspense fallback={null}><SolVoice state={state.voice} busy={state.busy} approval={!!state.agent?.approval} action={action} /></Suspense></div>}
       {!!state.messages.length && <EyeTracker className="eyt-inline" size={24} eyeScale={1.5} />}
       <strong>Sol AI</strong>
       <span className="sol-chat-plan">{state.ready ? t('Forfait ChatGPT', 'ChatGPT plan') : ''}</span>
-      {state.ready && state.voice?.available === true && <button className="pill-action" aria-pressed={!!state.voice?.open} aria-label={t('Mode vocal', 'Voice mode')} title={t('Mode vocal', 'Voice mode')} onClick={() => send({ type: state.voice?.open ? 'voice.close' : 'voice.open' })}><Mic size={16} /></button>}
       <button className="pill-action" disabled={state.busy || !state.messages.length} onClick={() => send({ type: 'chat.clear' })}>{t('Nouvelle discussion', 'New chat')}</button>
       <button className="pill-action" aria-label={t('Fermer', 'Close')} title={t('Fermer', 'Close')} onClick={() => send({ type: 'chat.toggle' })}>×</button>
     </header>
@@ -74,9 +83,9 @@ export default function SolChat() {
       </Message>)}
       <SolAiTrace agent={state.agent ?? null} busy={state.busy} />
       {state.error && state.error !== 'cancelled' && <p role="alert" className="sol-chat-error">{aiError(state.error)}</p>}
+      {state.voice?.error && <p role="alert" className="sol-chat-error">{voiceError(state.voice.error)}</p>}
     </MessageScroller>
     {state.ready && state.autoApproveActions && <p className="sol-chat-permission" role="status">{t('Actions toujours autorisées · modifiable dans Paramètres → Sol AI', 'Actions always allowed · change in Settings → Sol AI')}</p>}
-    {state.ready && state.voice?.available === true && state.voice.open && <Suspense fallback={null}><SolVoice state={state.voice} busy={state.busy} approval={!!state.agent?.approval} onUseText={setDraft} /></Suspense>}
     {state.ready && <SolChatAttachments files={state.attachments ?? []} busy={state.busy} attaching={state.attaching} error={state.attachmentError} onSend={!draft.trim() ? () => send({ type: 'chat.send', input: '' }) : undefined} />}
     {state.ready
       ? <PromptInput className="sol-chat-input" value={draft} onValueChange={setDraft} minRows={1} maxRows={6} maxLength={20000}
@@ -88,5 +97,5 @@ export default function SolChat() {
           {state.signingIn
             ? <><p role="status">{t('Terminez la connexion dans le navigateur…', 'Finish signing in through the browser…')}</p><button className="pill-action" onClick={() => send({ type: 'ai.connect.cancel' })}>{t('Annuler', 'Cancel')}</button></>
             : <button className="pill-action primary" onClick={() => send({ type: 'ai.connect' })}>{t('Continuer avec ChatGPT', 'Continue with ChatGPT')}</button>}</div>}
-  </div>;
+  </div></Activity>;
 }

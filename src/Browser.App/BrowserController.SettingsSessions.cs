@@ -202,6 +202,7 @@ public sealed partial class BrowserController
         _suggesting = false;
         _downloadsOpen = false;
         _settingsOpen = false;
+        _voiceSetupOpen = false;
         _profilesOpen = false;
         _extensionsOpen = false;
         // Question d'accès fermée sans réponse : refus pour cette fois, rien n'est retenu.

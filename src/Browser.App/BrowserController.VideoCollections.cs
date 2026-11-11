@@ -24,7 +24,7 @@ public sealed partial class BrowserController
                 || _pages.CoreOf(id)?.Source != picker.Url || !_popup.IsOpen) return;
             _popup.Post(JsonSerializer.Serialize(new
             {
-                popup = "videos", id, title = _tabs.Tabs.FirstOrDefault(t => t.Id == id)?.Title ?? "Vidéos",
+                popup = "videos", id, audioAvailable = VideoEngine.AudioSupported, title = _tabs.Tabs.FirstOrDefault(t => t.Id == id)?.Title ?? "Vidéos",
                 protectedMedia = _pages.VideoProtected(id), phase, sourceId = "collection", qualities = Array.Empty<int>(),
                 preferred = _settings.VideoQuality, selected = 0, items = Array.Empty<object>(),
                 collection = new { token = collection.Token, mode, start = collection.Start, more = collection.More,
@@ -59,9 +59,9 @@ public sealed partial class BrowserController
         finally { if (_videoProbeCancel == cancel) _videoProbeCancel = null; }
     }
 
-    private async Task DownloadVideoCollectionAsync(string id, string token, string input, int height)
+    private async Task DownloadVideoCollectionAsync(string id, string token, string input, int height, string? output = null)
     {
-        if (_startingVideo || !_settings.VideoDownloads || _videoCollection is not { } collection || collection.Id != id
+        if (!VideoAudioFormat.IsValid(output) || VideoAudioFormat.IsAudio(output) && !VideoEngine.AudioSupported || _startingVideo || !_settings.VideoDownloads || _videoCollection is not { } collection || collection.Id != id
             || collection.Token != token || _videoPicker is not { } picker || picker.Id != id || picker.Url != collection.Document
             || _pages.CoreOf(id) is not { } core || core.Source != picker.Url || _pages.VideoProtected(id)
             || !VideoQualitySelection.Preferences.Contains(height) || input.Length > 5000) return;
@@ -82,7 +82,7 @@ public sealed partial class BrowserController
                 var cookies = await _pages.VideoCookiesAsync(id, item.Url, referer);
                 if (_closingWindow || _videoPicker != picker || core.Source != picker.Url || _pages.VideoProtected(id)) return;
                 jobs.Add(new(item.Url, referer, $"{item.Position:D3} - {item.Title}", folder, Path.Combine(AppPaths.BaseDir, "tools", "video"),
-                    cookies, height, item.Direct, adaptQuality: true));
+                    cookies, height, item.Direct, adaptQuality: true, output: output));
             }
             HidePopup();
             // Each selected video has its own pause/resume/cancel and failure state. Two run at a time.

@@ -1,0 +1,101 @@
+{
+  "python": {
+    "version": "3.13.9",
+    "url": "https://www.python.org/ftp/python/3.13.9/python-3.13.9-embed-amd64.zip",
+    "sha256": "91d828c2da3a029b41699e918674a0cb379c02cf20dab9c501306885f837402a"
+  },
+  "wheels": [
+    {
+      "name": "flatbuffers",
+      "version": "25.12.19",
+      "filename": "flatbuffers-25.12.19-py2.py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/e8/2d/d2a548598be01649e2d46231d151a6c56d10b964d94043a335ae56ea2d92/flatbuffers-25.12.19-py2.py3-none-any.whl",
+      "sha256": "7634f50c427838bb021c2d66a3d1168e9d199b0607e6329399f04846d42e20b4"
+    },
+    {
+      "name": "numpy",
+      "version": "2.5.4",
+      "filename": "numpy-2.5.4-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/90/8c/140a40398a66b4471211be1affdb6ed24c486d581bd28d07b7f2fcb69540/numpy-2.5.4-cp313-cp313-win_amd64.whl",
+      "sha256": "8b4d2fd2d34e5f8c9235ee787de5631a37a28402b15cb80814df973d2be54129"
+    },
+    {
+      "name": "onnxruntime",
+      "version": "1.31.1",
+      "filename": "onnxruntime-1.31.1-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/59/bf/a1d282b4c753ba3e9b31f4c11abd2bc2390513dc5e3792ca3b78e42401c3/onnxruntime-1.31.1-cp313-cp313-win_amd64.whl",
+      "sha256": "0558f29d5f6ac09957390c9c5495931485ee8ae7f0ce781ccee86a0ae5c2348b"
+    },
+    {
+      "name": "packaging",
+      "version": "26.3",
+      "filename": "packaging-26.3-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl",
+      "sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c"
+    },
+    {
+      "name": "pathvalidate",
+      "version": "3.3.1",
+      "filename": "pathvalidate-3.3.1-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/9a/70/875f4a23bfc4731703a5835487d0d2fb999031bd415e7d17c0ae615c18b7/pathvalidate-3.3.1-py3-none-any.whl",
+      "sha256": "5263baab691f8e1af96092fa5137ee17df5bdfbd6cff1fcac4d6ef4bc2e1735f"
+    },
+    {
+      "name": "piper-tts",
+      "version": "1.8.0",
+      "filename": "piper_tts-1.8.0-cp39-abi3-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/12/9c/c736d1961cf9ce0655278731b9430df41892ca2ded7b09dabcb340612158/piper_tts-1.8.0-cp39-abi3-win_amd64.whl",
+      "sha256": "5da9bfdb05dfe15da3536859d422e605483ffa6d2b3ec2c5b9593bae6b5aa6a4"
+    },
+    {
+      "name": "protobuf",
+      "version": "7.36.2",
+      "filename": "protobuf-7.36.2-cp310-abi3-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/8a/55/b77bda4e5e5f5971fb51b07663694690e9afdb9402136c16a522bd621cad/protobuf-7.36.2-cp310-abi3-win_amd64.whl",
+      "sha256": "a300819d441e078a5608c0d3c709796bb548136058fda017ae51d425b44fd353"
+    },
+    {
+      "name": "transcribe-cpp",
+      "version": "0.4.1",
+      "filename": "transcribe_cpp-0.4.1-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/60/df/55b97bec42c43f44a3d1bf1d4bbaf32b8bb1f99f444f4d49bfe6ca4224f4/transcribe_cpp-0.4.1-py3-none-any.whl",
+      "sha256": "a4bb6ffb8eac16875daec12a8b3b9598024a34d1c10507cff51f0c42400eab5d"
+    },
+    {
+      "name": "transcribe-cpp-native",
+      "version": "0.4.1",
+      "filename": "transcribe_cpp_native-0.4.1-py3-none-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/b3/d9/41cbb7195f0fbcf3fea8675da8e597b3b2fc5b553a754120823c62d2f54a/transcribe_cpp_native-0.4.1-py3-none-win_amd64.whl",
+      "sha256": "ed0df2783c70c08eca406cbab5b79e2f0da3cac575cbc562b402b953fff508df"
+    }
+  ],
+  "assets": [
+    {
+      "name": "silero-vad-v6.2.1.onnx",
+      "url": "https://raw.githubusercontent.com/snakers4/silero-vad/v6.2.1/src/silero_vad/data/silero_vad.onnx",
+      "sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3"
+    },
+    {
+      "name": "silero-vad-v6.2.1-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/snakers4/silero-vad/v6.2.1/LICENSE",
+      "sha256": "2e63e9a38b6e8fc0c7bc37ce174caca1862870856c6daf5697cfb785e925520b"
+    }
+  ],
+  "sources": [
+    {
+      "name": "piper_tts-1.8.0.tar.gz",
+      "sha256": "830588aded347df579c91a32703e0fc2a3685d84f1e3533b14f2de69135d4904",
+      "url": "https://files.pythonhosted.org/packages/02/cc/95b18b58d9c235d8e0bcece7321b7a7347873c14f9fea2c734b31ef04ff2/piper_tts-1.8.0.tar.gz"
+    },
+    {
+      "url": "https://codeload.github.com/OHF-Voice/piper1-gpl/tar.gz/refs/tags/v1.8.0",
+      "name": "piper1-gpl-v1.8.0.tar.gz",
+      "sha256": "0a22987a6157f14e2fb7cf4aa702b547467fd0448bea9f233abd503c3ff4a0e1"
+    },
+    {
+      "url": "https://codeload.github.com/espeak-ng/espeak-ng/tar.gz/724808c5a83f9ef95fdd0db886ba7ba537ff224a",
+      "name": "espeak-ng-724808c5a83f9ef95fdd0db886ba7ba537ff224a.tar.gz",
+      "sha256": "7d8ebd78201923a443245362a928999977d1721c3eeba596eafc6ea8db7e243c"
+    }
+  ]
+}

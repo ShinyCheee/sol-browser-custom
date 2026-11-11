@@ -5,7 +5,7 @@ namespace Browser.App;
 
 public sealed partial class BrowserController
 {
-    private async void ShowExtension(ExtensionInfo extension, double right, double top)
+    private async void ShowExtension(ExtensionInfo extension, double right, double top, bool inspect = false)
     {
         await _extensionChanges.WaitAsync();
         try
@@ -17,13 +17,15 @@ public sealed partial class BrowserController
             if (!(await profile.GetBrowserExtensionsAsync()).Any(e => e.Id == extension.Id && e.IsEnabled))
             { ExtensionActionUnavailable(); return; }
             if (_tabs.ActiveId != tabId || _pages.CoreOf(tabId) != core) return;
-            if (ExtensionAction.Marker(extension.Folder) is not { } marker || !await _pages.InvokeExtensionActionAsync(tabId, marker))
+            var marker = ExtensionAction.Marker(extension.Folder);
+            if (!inspect && (marker is null || !await _pages.InvokeExtensionActionAsync(tabId, marker)))
             { ExtensionActionUnavailable(); return; }
             if (_tabs.ActiveId != tabId || _pages.CoreOf(tabId) != core) return;
-            // Les réglages ne remplacent pas l'action du bouton d'une extension.
-            if ((extension.Popup ?? extension.SidePanel) is { Length: > 0 } page && ExtensionPopup is { } host)
+            // Les réglages ne remplacent pas l'action du bouton d'une extension, sauf en inspection développeur sans popup.
+            var target = extension.Popup ?? extension.SidePanel ?? (inspect ? (extension.Options ?? "manifest.json") : null);
+            if (target is { Length: > 0 } page && ExtensionPopup is { } host)
                 await host.ShowAsync($"chrome-extension://{extension.Id}/{page.TrimStart('/')}", right, top,
-                    profile.ProfileName, marker, panel: extension.Popup is null);
+                    profile.ProfileName, marker ?? "", panel: extension.Popup is null, inspect: inspect);
         }
         catch (Exception error) when (error is InvalidOperationException or COMException or ArgumentException
             or IOException or UnauthorizedAccessException or TimeoutException)

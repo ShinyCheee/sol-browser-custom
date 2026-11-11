@@ -17,7 +17,9 @@ public sealed partial class BrowserController
                 if (Profiles.Rename(AppPaths.BaseDir, id, c.Title!) && id == AppPaths.Profile) _window.Title = $"Sol — {ProfileName(id)}";
                 break;
             case "window.private":
-                HidePopup(); Open(Settings.DefaultHomePage, isPrivate: true); return true;
+                DebugLog.Write("private.before-hide");
+                HidePopup(); DebugLog.Write("private.before-open");
+                Open(Settings.DefaultHomePage, isPrivate: true); DebugLog.Write("private.opened"); return true;
             case "profile.isolated":
                 HidePopup();
                 OpenProfile(Profiles.CreateTemporary(AppPaths.BaseDir, T("Navigation privée", "Private browsing")), replace: false, isPrivate: true);

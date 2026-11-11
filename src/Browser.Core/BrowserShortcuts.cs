@@ -22,6 +22,7 @@ public static class BrowserShortcuts
         new(0x54,6,"tab.reopen","Rouvrir l’onglet fermé","Reopen closed tab","T"),
         new(0x4E,6,"window.private","Navigation privée","Private browsing","N"),
         new(0x4D,6,"notes.manage","Ouvrir les notes","Open notes","M"),
+        new(0x4D,2,"voice.toggle","Activer ou arrêter la voix de Sol AI","Start or stop Sol AI voice","M"),
         new(0x51,6,"notes.open","Ajouter une note rapide","Add a quick note","Q"),
         new(0x4E,3,"notes.manage","Ouvrir les notes","Open notes","N"),
         new(0x4E,7,"notes.open","Ajouter une note rapide","Add a quick note","N"),

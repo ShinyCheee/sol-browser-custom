@@ -36,7 +36,8 @@ public static class ExtensionCatalog
                 new[] { "permissions", "host_permissions" }.SelectMany(field => Strings(root, field))
                     .Concat(root.TryGetProperty("content_scripts", out var scripts) && scripts.ValueKind == JsonValueKind.Array
                         ? scripts.EnumerateArray().SelectMany(script => Strings(script, "matches")) : []).Distinct().ToArray(),
-                Text(root, "update_url") is { } update && update.StartsWith(ExtensionPackage.StoreUpdates, StringComparison.OrdinalIgnoreCase),
+                Text(root, "update_url") is { } update && (update.StartsWith(ExtensionPackage.StoreUpdates, StringComparison.OrdinalIgnoreCase)
+                    || update.StartsWith(ExtensionPackage.EdgeStoreUpdates, StringComparison.OrdinalIgnoreCase)),
                 root.TryGetProperty("side_panel", out var panel) && Text(panel, "default_path") is { Length: > 0 } panelPage ? panelPage : null);
         }
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException) { return null; }
@@ -138,6 +139,48 @@ public static class ExtensionCatalog
         using var rsa = RSA.Create(2048);
         manifest["key"] = Convert.ToBase64String(rsa.ExportSubjectPublicKeyInfo());
         File.WriteAllText(file, manifest.ToJsonString());
+    }
+
+    private const string SourceFile = "sol-source.txt";
+
+    public static void SaveSource(string folder, string sourcePath) =>
+        File.WriteAllText(Path.Combine(folder, SourceFile), Path.GetFullPath(sourcePath));
+
+    public static string? SourceFolder(string folder)
+    {
+        var path = Path.Combine(folder, SourceFile);
+        return File.Exists(path) && File.ReadAllText(path).Trim() is { Length: > 0 } s ? s : null;
+    }
+
+    public static bool IsEdgeStore(string folder)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(folder, "manifest.json")), ExtensionPackage.Lenient);
+            return Text(doc.RootElement, "update_url") is { } u && u.StartsWith(ExtensionPackage.EdgeStoreUpdates, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException) { return false; }
+    }
+
+    public static bool RefreshFromSource(string folder)
+    {
+        if (SourceFolder(folder) is not { } source || !Directory.Exists(source) || Read(source, "") is null) return false;
+        var manifestFile = Path.Combine(folder, "manifest.json");
+        var key = File.Exists(manifestFile) ? JsonNode.Parse(File.ReadAllText(manifestFile), null, ExtensionPackage.Lenient)?["key"]?.GetValue<string>() : null;
+        var actionKeyFile = Path.Combine(folder, ExtensionAction.KeyFile);
+        var actionKey = File.Exists(actionKeyFile) ? File.ReadAllText(actionKeyFile) : null;
+        CopyTo(source, folder);
+        SaveSource(folder, source);
+        if (actionKey is not null) File.WriteAllText(actionKeyFile, actionKey);
+        if (key is { Length: > 0 })
+        {
+            var manifest = JsonNode.Parse(File.ReadAllText(manifestFile), null, ExtensionPackage.Lenient)!.AsObject();
+            manifest["key"] ??= key;
+            File.WriteAllText(manifestFile, manifest.ToJsonString());
+        }
+        else EnsureKey(folder);
+        ExtensionShim.Apply(folder);
+        return true;
     }
 
     public static string? Icon(string folder)

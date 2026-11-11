@@ -74,8 +74,8 @@ export function createBackupApp({pool, s3, verify, sign}: any) {
       await s3.send(new DeleteObjectCommand({Bucket: BUCKET, Key: key}));
       return c.json({error: "not-a-backup"}, 400);
     }
-    const {device} = await c.req.json().catch(() => ({device: ""}));
-    await storage.register(userId, id, deviceOf(device), head.ContentLength);
+    const {device, replace} = await c.req.json().catch(() => ({device: "", replace: false}));
+    await storage.register(userId, id, deviceOf(device), head.ContentLength, Boolean(replace));
     return c.json({id, bytes: head.ContentLength}, 201);
   });
   app.get("/backups/:id/url", async c => {

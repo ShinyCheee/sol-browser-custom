@@ -46,6 +46,25 @@ public sealed partial class BrowserController
             && !_sessions.Belongs(tab.SessionId, url) && !TabSessions.IsSignIn(url)) ChangeSession(id, "");
         _pages.Navigate(id, url);
     }
+    private void DetachSession(string sessionId)
+    {
+        if (_deletingSession is not null || _sessions.Resolve(sessionId).Length == 0) return;
+        var menuTab = _sessionMenuTab;
+        foreach (var tab in _tabs.Tabs.Where(t => t.SessionId == sessionId).ToList())
+        {
+            if (_downloads.Any(d => d.TabId == tab.Id && DownloadPending(d.Id, d.Op))) continue;
+            _network.Forget(tab.Id); if (_network.Shown == tab.Id) _network.Shown = null;
+            _designTabs.Remove(tab.Id); _translationOriginals.Remove(tab.Id);
+            var visible = tab.Id == _tabs.ActiveId || tab.Id == _split.SecondaryId;
+            var asleep = _pages.IsAsleep(tab.Id) || (!visible && _settings.MemorySaver);
+            _pages.Remove(tab.Id);
+            if (_tabs.SetSession(tab.Id, "") is { } changed)
+            { if (asleep) _pages.AddAsleep(changed); else _pages.Add(changed); }
+        }
+        _pinnedExtensions = []; _pinsInitialized = false; _pinProfileName = null;
+        if (menuTab is not null) { _sessionMenuTab = menuTab; _popup.Post(SessionsJson(menuTab)); }
+        Refresh();
+    }
     private async Task DeleteSessionAsync(string sessionId)
     {
         if (_deletingSession is not null || _sessions.Resolve(sessionId).Length == 0 || _tabs.Tabs.Any(t => t.SessionId == sessionId)) return;

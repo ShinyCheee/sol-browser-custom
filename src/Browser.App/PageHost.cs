@@ -43,19 +43,22 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     }
 
     private static bool IsStore(string url) =>
-        Uri.TryCreate(url, UriKind.Absolute, out var parsed) && parsed.Scheme == "https" && parsed.Host == "chromewebstore.google.com";
+        Uri.TryCreate(url, UriKind.Absolute, out var parsed) && parsed.Scheme == "https"
+        && (parsed.Host == "chromewebstore.google.com"
+            || (parsed.Host == "microsoftedge.microsoft.com" && parsed.AbsolutePath.StartsWith("/addons", StringComparison.Ordinal)));
 
     // Le store est une application à page unique : le script est posé sur toutes ses pages et suit lui-même l'adresse.
-    // Sur une fiche, le bouton d'installation (repéré au mot « Chrome », quelle que soit la langue) devient celui de Sol.
+    // Sur une fiche Chrome Web Store ou Microsoft Edge Add-ons, le bouton d'installation devient celui de Sol.
     private const string StoreScript = """
         (() => {
           if (window.__solStore) return; window.__solStore = true;
           let installed = [];
-          const id = () => (location.pathname.match(/^\/detail\/(?:[^/]+\/)?([a-p]{32})\/?$/) || [])[1];
+          const id = () => (location.pathname.match(/^\/(?:addons\/)?detail\/(?:[^/]+\/)?([a-p]{32})\/?$/) || [])[1];
           const french = () => (document.documentElement.lang || navigator.language).startsWith('fr');
           const label = () => installed.includes(id())
             ? (french() ? 'Installée dans Sol' : 'Installed in Sol') : (french() ? 'Ajouter à Sol' : 'Add to Sol');
-          const ours = b => b.dataset.sol === '1' || (/chrome/i.test(b.textContent || '') && b.textContent.trim().length < 48);
+          const ours = b => b.dataset.sol === '1' || b.id?.startsWith('getOrRemoveButton-')
+            || (/chrome|obtenir|get|edge/i.test(b.textContent || '') && b.textContent.trim().length < 48);
           const update = () => {
             if (!id()) return;
             document.querySelectorAll('button').forEach(b => {

@@ -29,6 +29,10 @@ public sealed class Settings
     private int _solAiTone, _solAiLength;
     public int SolAiTone { get => _solAiTone; set => _solAiTone = value is >= 0 and <= 2 ? value : 0; }
     public int SolAiLength { get => _solAiLength; set => _solAiLength = value is >= 0 and <= 2 ? value : 0; }
+    public bool SolVoiceReadAloud { get; set; } = true;
+    private int _solVoiceDevice = -1;
+    public int SolVoiceDevice { get => _solVoiceDevice; set => _solVoiceDevice = value is >= -1 and < 100 ? value : -1; }
+    public bool ExtensionDeveloperMode { get; set; }
     public bool FullScreen { get; set; } = true;
     private double _uiScale = 1;
     /// <summary>Taille de l'interface choisie dans les réglages : 80 à 100 %, par pas de 5 %.</summary>

@@ -9,6 +9,7 @@ public sealed partial class VideoDownload
 {
     private async Task DownloadDirectAsync(CancellationToken ct)
     {
+        if (VideoAudioFormat.IsAudio(output)) { await DownloadDirectAudioAsync(ct); return; }
         Directory.CreateDirectory(directory);
         var stem = Path.Combine(directory, VideoSources.FileStem(title) + " [" + _key + "]");
         var video = stem + ".video.part";

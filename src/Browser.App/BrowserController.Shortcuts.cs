@@ -27,6 +27,7 @@ public sealed partial class BrowserController
         Add(T("Rouvrir l’onglet fermé", "Reopen closed tab"), new("tab.reopen"), keywords: "reopen rouvrir fermer onglet");
         Add(T("Navigation privée", "Private browsing"), new("window.private"), keywords: "private incognito privee");
         Add(T("Ouvrir les notes", "Open notes"), new("notes.manage"), keywords: "notes scratchpad");
+        if (!PrivateActive) Add(T("Activer ou arrêter la voix de Sol AI", "Start or stop Sol AI voice"), new("voice.toggle"), keywords: "voice voix micro orb orbe conversation");
         Add(T("Ajouter une note rapide", "Add a quick note"), new("notes.open"), keywords: "notes create ajouter");
         Add(T("Historique", "History"), new("history.open", X: x, Y: 70), keywords: "history historique visites");
         Add(T("Favoris", "Bookmarks"), new("library.open", X: x, Y: 70), keywords: "bookmarks favoris");

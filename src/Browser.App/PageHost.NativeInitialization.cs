@@ -39,15 +39,24 @@ public sealed partial class PageHost
     public async Task<bool> DeleteSessionAsync(string sessionId)
     {
         if (!TabSessions.ValidId(sessionId)) return false;
+        var name = "sol-" + sessionId;
+        _profileReady.Remove(name);
+        _sessionCookies.Remove(name);
+        _sessionSeeds.Remove(name);
+        _gitLabRestored.Remove(name);
+        try { if (File.Exists(GitLabFile(name))) File.Delete(GitLabFile(name)); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        var engine = Path.Combine(Environment.GetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER") ?? AppPaths.WebData, "EBWebView");
+        if (!Directory.Exists(Path.Combine(engine, "WV2Profile_" + name))) return true;
         var view = new WebView2 { Opacity = 0, IsHitTestVisible = false, Width = 1, Height = 1 };
         container.Children.Add(view);
         try
         {
-            await StartEngineAsync(view, "sol-" + sessionId);
+            await StartEngineAsync(view, name);
             // L'API moteur marque le profil pour suppression après fermeture de ses vues.
             view.CoreWebView2.Profile.Delete();
-            _profileReady.Remove("sol-" + sessionId);
-            _sessionCookies.Remove("sol-" + sessionId);
+            _profileReady.Remove(name);
+            _sessionCookies.Remove(name);
             return true;
         }
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException)

@@ -39,13 +39,17 @@ export function backupStorage(pool: any, s3: any) {
     const {rows} = await pool.query("SELECT bytes FROM backup_uploads WHERE id = $1 AND user_id = $2 AND expires_at > now()", [id, userId]);
     return rows[0];
   }
-  async function register(userId: string, id: string, device: string, bytes: number) {
+  async function register(userId: string, id: string, device: string, bytes: number, replace = false) {
     const removed = await locked(userId, async db => {
       const {rowCount} = await db.query("DELETE FROM backup_uploads WHERE id = $1 AND user_id = $2 AND bytes = $3 AND expires_at > now() RETURNING id", [id, userId, bytes]);
       if (!rowCount) throw new Error("upload reservation expired");
       await db.query("INSERT INTO backups (id, user_id, device, bytes) VALUES ($1, $2, $3, $4)", [id, userId, device, bytes]);
-      return (await db.query(`DELETE FROM backups WHERE user_id = $1 AND id NOT IN
+      const replaced = replace
+        ? (await db.query("DELETE FROM backups WHERE user_id = $1 AND device = $2 AND id <> $3 RETURNING id", [userId, device, id])).rows
+        : [];
+      const stale = (await db.query(`DELETE FROM backups WHERE user_id = $1 AND id NOT IN
         (SELECT id FROM backups WHERE user_id = $1 ORDER BY created_at DESC, id DESC LIMIT 5) RETURNING id`, [userId])).rows;
+      return [...replaced, ...stale];
     });
     for (const row of removed) await s3.send(new DeleteObjectCommand({Bucket: BUCKET, Key: objectKey(userId, row.id)}));
   }

@@ -56,6 +56,7 @@ export type Command = {
   title?: string;
   input?: string;
   query?: string;
+  output?: 'video' | 'flac' | 'wav' | 'mp3';
   index?: number;
   ratio?: number;
   x?: number;

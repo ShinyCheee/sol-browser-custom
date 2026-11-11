@@ -26,10 +26,11 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
             const m = s && s.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
             return m ? [+m[1], +m[2], +m[3], m[4] === undefined ? 1 : +m[4]] : null;
           };
-          // Résout n'importe quelle couleur CSS (nom, hex, hsl…) sans rien ajouter à la page.
-          const canvas = document.createElement('canvas');
-          canvas.width = canvas.height = 1;
-          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          // Résout n'importe quelle couleur CSS (nom, hex, hsl…) en réutilisant un seul contexte 1x1 par page.
+          const ctx = window.__solColorCtx || (window.__solColorCtx = (() => {
+            const c = document.createElement('canvas'); c.width = c.height = 1;
+            return c.getContext('2d', { willReadFrequently: true });
+          })());
           const resolve = css => {
             if (!css || !ctx || !CSS.supports('color', css)) return null;
             const rgb = parse(css);

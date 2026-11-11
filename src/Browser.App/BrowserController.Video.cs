@@ -21,7 +21,7 @@ public sealed partial class BrowserController
         if (PublishVideoCatalog(id, true)) return;
         _popup.ShowCentered(520, JsonSerializer.Serialize(new
         {
-            popup = "videos", id, title = _tabs.Tabs.FirstOrDefault(t => t.Id == id)?.Title ?? "Vidéo",
+            popup = "videos", id, audioAvailable = VideoEngine.AudioSupported, title = _tabs.Tabs.FirstOrDefault(t => t.Id == id)?.Title ?? "Vidéo",
             protectedMedia = _pages.VideoProtected(id), phase = "", sourceId = "", qualities = Array.Empty<int>(), preferred = _settings.VideoQuality, selected = 0,
             items = _pages.VideosOf(id).OrderBy(s => s.Kind == "page" ? 0 : s.Kind == "hls" || s.Kind == "dash" ? 1 : 2)
                 .Select(s => new { id = s.Id, label = s.Label, kind = s.Kind, host = new Uri(s.Url).Host }),
@@ -39,7 +39,7 @@ public sealed partial class BrowserController
         void Publish(string phase, int[]? heights = null)
         {
             if (_closingWindow || _videoProbeCancel != cancel || _videoPicker != picker || !_popup.IsOpen || _pages.CoreOf(id)?.Source != picker.Url) return;
-            _popup.Post(JsonSerializer.Serialize(new { popup = "videos", id, title, phase, sourceId, protectedMedia = _pages.VideoProtected(id),
+            _popup.Post(JsonSerializer.Serialize(new { popup = "videos", id, audioAvailable = VideoEngine.AudioSupported, title, phase, sourceId, protectedMedia = _pages.VideoProtected(id),
                 items = Array.Empty<object>(), qualities = heights ?? [], preferred = _settings.VideoQuality,
                 selected = VideoQualitySelection.Pick(heights ?? [], _settings.VideoQuality) }));
         }
@@ -59,15 +59,21 @@ public sealed partial class BrowserController
         finally { if (_videoProbeCancel == cancel) _videoProbeCancel = null; }
     }
 
-    private async Task DownloadVideoAsync(string id, string sourceId, int height)
+    private async Task DownloadVideoAsync(string id, string sourceId, int height, string? output = null)
     {
-        if (_startingVideo || !_settings.VideoDownloads || _videoPicker is not { } picker || picker.Id != id
+        if (!VideoAudioFormat.IsValid(output) || VideoAudioFormat.IsAudio(output) && !VideoEngine.AudioSupported || _startingVideo || !_settings.VideoDownloads || _videoPicker is not { } picker || picker.Id != id
             || _pages.CoreOf(id) is not { } core || core.Source != picker.Url || _pages.VideoProtected(id)
             || _videoQualities is not { } qualities || qualities.SourceId != sourceId || !qualities.Heights.Contains(height)) return;
-        var variant = sourceId == "catalog" ? _pages.VideoVariantsOf(id).FirstOrDefault(v => v.Height == height) : null;
+        var audioOnly = VideoAudioFormat.IsAudio(output);
+        var variants = _pages.VideoVariantsOf(id);
+        var variant = sourceId == "catalog" ? (audioOnly
+            ? variants.OrderByDescending(v => v.AudioUrl is not null).ThenByDescending(v => v.Height).FirstOrDefault()
+            : variants.FirstOrDefault(v => v.Height == height)) : null;
         var source = _pages.VideosOf(id).FirstOrDefault(s => s.Id == sourceId);
         if (variant is null && source is null) return;
-        var url = variant is { NeedsResolver: false } ? variant.Url : variant is not null ? picker.Url : source!.Url;
+        // Player audio candidates are not ranked in the live catalogue; let the resolver choose ba/b.
+        var resolveAudio = audioOnly && variant?.FormatId is not null;
+        var url = resolveAudio ? picker.Url : variant is { NeedsResolver: false } ? variant.Url : variant is not null ? picker.Url : source!.Url;
         _startingVideo = true;
         try
         {
@@ -77,12 +83,12 @@ public sealed partial class BrowserController
             var folder = Environment.GetEnvironmentVariable("NAVIGATEUR_TEST_DOWNLOAD_DIR");
             if (string.IsNullOrEmpty(folder)) folder = core.Profile.DefaultDownloadFolderPath;
             var title = _tabs.Tabs.FirstOrDefault(t => t.Id == id)?.Title ?? "Video";
-            var direct = variant is { Kind: "file", NeedsResolver: false };
+            var direct = !resolveAudio && variant is { Kind: "file", NeedsResolver: false };
             var referer = source?.Referer ?? _pages.VideosOf(id).FirstOrDefault(s => s.Url == url)?.Referer ?? picker.Url;
             cookies.AddRange(await _pages.VideoCookiesAsync(id, url, referer));
             if (_closingWindow || _videoPicker != picker || core.Source != picker.Url || _pages.VideoProtected(id)) return;
             var job = new VideoDownload(url, referer, title, folder, Path.Combine(AppPaths.BaseDir, "tools", "video"), cookies.DistinctBy(c => (c.Domain,c.Path,c.Name)).ToArray(), height,
-                direct, direct ? variant!.AudioUrl : null);
+                direct, direct ? variant!.AudioUrl : null, output: output);
             HidePopup(); _videoPicker = null;
             AddVideoDownload(id, job); DownloadsChanged(throttle: false);
         }

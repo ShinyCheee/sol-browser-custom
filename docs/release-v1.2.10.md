@@ -1,0 +1,7 @@
+# Sol 1.2.10
+
+- **Économie de mémoire renforcée** : mise en veille (`TrySuspendAsync` / niveau de mémoire bas) des vues d’interface masquées (menus, dock, inspecteur, écran d’accueil), ouverture des groupes d’onglets avec les onglets secondaires endormis, suivi immédiat des onglets en arrière-plan dès leur création et réutilisation d’un unique contexte `<canvas>` 1×1 pour la détection de couleur ambiante.
+- **Sauvegarde automatique unique par appareil** : la sauvegarde en ligne met désormais à jour la sauvegarde existante de l’appareil en fusionnant les fichiers et les mots de passe existants, puis remplace les anciennes entrées au lieu d’accumuler plusieurs sauvegardes.
+- **Extensions Microsoft Edge Add-ons & Mode développeur** : installation et mise à jour natives depuis Microsoft Edge Add-ons et Chrome Web Store, bouton « Ajouter à Sol » sur les deux boutiques, Mode développeur avec chargement d’extensions décompressées, synchronisation depuis le dossier source au rechargement et ouverture directe des DevTools d’extension (« Inspecter »).
+- **Sessions de sites optimisées** : nouvelle action « Libérer » pour ramener tous les onglets d’une session vers la session principale en un clic, et nettoyage complet des ressources mémoire et disque à la suppression d’une session.
+- **Commande vocale Sol (Windows x64) & extraction audio** : détection vocale locale Silero VAD, transcription Parakeet, synthèse vocale Piper locale avec libération immédiate du verrou micro après capture, et téléchargement audio seul (FLAC, WAV, MP3 320 kb/s).

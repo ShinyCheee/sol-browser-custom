@@ -133,14 +133,21 @@ public sealed partial class BrowserController
             case "extensions.open": _ = OpenExtensionsAsync(); return true;
             case "extension.add": _ = AddExtensionAsync(id); return true;
             case "extension.folder": _ = AddExtensionFolderAsync(); return true;
+            case "extension.devmode":
+                _settings.ExtensionDeveloperMode = !_settings.ExtensionDeveloperMode;
+                JsonFileStore.Save(AppPaths.Settings, _settings);
+                _ = RefreshExtensionsAsync();
+                return true;
             case "extension.store":
                 HidePopup(); Open("https://chromewebstore.google.com/"); break;
+            case "extension.addons":
+                HidePopup(); Open("https://microsoftedge.microsoft.com/addons/Microsoft-Edge-Extensions-Home"); break;
             case "extension.current":
                 if (_tabs.ActiveId is { } storeTab && _pages.CoreOf(storeTab) is { } storeCore)
                     _ = StoreExtension(storeCore.Source) is { } shownId && _installedExtensions.Contains(shownId) ? OpenExtensionsAsync() : InstallStoreExtensionAsync(storeCore.Source);
                 return true;
             case "extensions.update": _ = UpdateExtensionsAsync(manual: true); return true;
-            case "extension.update": if (ExtensionCatalog.IsId(id) && _extensionUpdates.ContainsKey(id)) _ = OfferStoreExtensionAsync(id); return true;
+            case "extension.update": if (ExtensionCatalog.IsId(id) && _extensionUpdates.ContainsKey(id)) _ = OfferStoreExtensionAsync(id, ExtensionCatalog.IsEdgeStore(ExtensionFolder(id))); return true;
             case "extension.install": _ = InstallStoreExtensionAsync(c.Title!); return true;
             case "extension.confirm": _ = ConfirmStoreExtensionAsync(id); return true;
             case "extension.pin": _ = PinExtensionAsync(id); return true;
@@ -151,11 +158,11 @@ public sealed partial class BrowserController
             case "extension.toggle": _ = ChangeExtensionAsync(id, remove: false); return true;
             case "extension.remove": _ = ChangeExtensionAsync(id, remove: true); return true;
             case "extensions.menu": _ = OpenExtensionsMenuAsync(c.X!.Value, c.Y!.Value); return true;
-            case "extension.show":
+            case "extension.show" or "extension.inspect":
                 if (ExtensionCatalog.IsId(id) && ExtensionCatalog.Read(ExtensionFolder(id), id) is { } shownExtension)
                 {
                     HidePopup();
-                    ShowExtension(shownExtension, c.X ?? (_window.Content is FrameworkElement root ? root.ActualWidth - 14 : 1200), c.Y ?? Scaled(58));
+                    ShowExtension(shownExtension, c.X ?? (_window.Content is FrameworkElement root ? root.ActualWidth - 14 : 1200), c.Y ?? Scaled(58), inspect: c.Type == "extension.inspect");
                     break;
                 }
                 return true;
@@ -186,6 +193,7 @@ public sealed partial class BrowserController
                 return true;
             case "session.rename":
                 _sessions.Rename(id, c.Title!); HidePopup(); Refresh(); return true;
+            case "session.detach": DetachSession(id); return true;
             case "session.delete": _ = DeleteSessionAsync(id); return true;
             case "permission.answer": AnswerPermission(c.Index != 0); return true;
             case "permissions.forget": _ = ForgetPermissionsAsync(id); return true;

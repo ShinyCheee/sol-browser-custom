@@ -104,9 +104,10 @@ public sealed partial class BrowserController
     private bool _settingsOpen;
     public event Action? InterfaceScaleChanged;
 
-    private string SettingsJson() => JsonSerializer.Serialize(new
+    private string SettingsJson(string? section = null) => JsonSerializer.Serialize(new
     {
         popup = "settings",
+        section,
         ai = AiState(),
         version = typeof(App).Assembly.GetName().Version?.ToString(3) ?? "",
         update = Program.Update is { } update ? new { version = update.Version, percent = update.Percent, ready = update.Ready } : null,

@@ -14,7 +14,7 @@ public sealed partial class BrowserController
         Environment.GetEnvironmentVariable("NAVIGATEUR_CLOUD_API") ?? "https://br-wispy-night-b89mzp5p-backup.compute.c-14.us-east-1.aws.neon.tech");
     private const int CloudKeyLength = 12; // le fichier est hors de la machine : la clé doit résister à une attaque hors ligne
     // AutoKey : la clé gardée pour la sauvegarde automatique, protégée comme le reste de ce fichier par Windows.
-    private sealed record CloudSession(string Email, string Cookie, byte[] Salt, byte[] PasswordHash, string? AutoKey = null, DateTimeOffset? LastBackup = null);
+    private sealed record CloudSession(string Email, string Cookie, byte[] Salt, byte[] PasswordHash, string? AutoKey = null, DateTimeOffset? LastBackup = null, string? BackupId = null);
     private CloudSession? _cloud;
     private bool _cloudLoaded, _cloudBusy, _cloudUpload;
     private string? _cloudError, _cloudNotice;
@@ -130,11 +130,24 @@ public sealed partial class BrowserController
         PasswordBackupDocument? passwords = null;
         await CloudRunAsync(async () =>
         {
-            var result = await SealProfileAsync(key);
+            var existing = await Cloud.ListAsync(_cloud!.Cookie);
+            var previous = existing.Where(b => b.Id == _cloud.BackupId || string.Equals(b.Device, Environment.MachineName, StringComparison.OrdinalIgnoreCase)).ToList();
+            byte[]? previousBytes = null;
+            if (previous.FirstOrDefault() is { } latest)
+            {
+                try { previousBytes = await Cloud.DownloadAsync(_cloud.Cookie, latest.Id); }
+                catch (CloudException) { }
+            }
+            var result = await SealProfileAsync(key, previousBytes);
             var sealedFile = result.File;
             passwords = result.Passwords;
-            await Cloud.UploadAsync(_cloud!.Cookie, sealedFile, Environment.MachineName);
-            if (_cloud is { } session) { _cloud = session with { LastBackup = DateTimeOffset.UtcNow }; SaveCloud(); }
+            var newId = await Cloud.UploadAsync(_cloud!.Cookie, sealedFile, Environment.MachineName, replace: true);
+            foreach (var old in previous.Where(b => b.Id != newId))
+            {
+                try { await Cloud.DeleteAsync(_cloud.Cookie, old.Id); }
+                catch (CloudException) { }
+            }
+            if (_cloud is { } session) { _cloud = session with { LastBackup = DateTimeOffset.UtcNow, BackupId = newId }; SaveCloud(); }
             await RefreshCloudAsync();
             _cloudNotice = "saved";
         });
@@ -167,7 +180,7 @@ public sealed partial class BrowserController
           $"Passwords exported: {passwords.Exported}. Unreadable and omitted: {passwords.Unreadable}.")
         + (passwords.Unreadable > 0 ? T(" Exportez les entrées manquantes en CSV depuis leur navigateur puis importez-les dans Sol.", " Export the missing entries as CSV from their browser, then import them into Sol.") : "");
 
-    private async Task<(byte[] File, PasswordBackupDocument Passwords)> SealProfileAsync(string key)
+    private async Task<(byte[] File, PasswordBackupDocument Passwords)> SealProfileAsync(string key, byte[]? previousBackup = null)
     {
         SaveSession();
         JsonFileStore.Save(AppPaths.Settings, _settings);
@@ -184,6 +197,16 @@ public sealed partial class BrowserController
                 var sessions = files.TryGetValue("tab-sessions.json", out var sessionJson)
                     ? JsonSerializer.Deserialize<List<TabSession>>(sessionJson) ?? [] : [];
                 var passwords = PasswordBackup.Collect(EngineData, sessions, temp, AppPaths.PendingPasswords);
+                if (previousBackup is not null && Backup.Open(previousBackup, key) is { } previousFiles)
+                {
+                    foreach (var (name, bytes) in previousFiles)
+                        if (name != Backup.Manifest && name != Backup.Passwords && !files.ContainsKey(name)) files[name] = bytes;
+                    if (previousFiles.TryGetValue(Backup.Passwords, out var prevPass))
+                    {
+                        try { passwords = PasswordBackup.Merge(passwords, PasswordBackup.Decode(prevPass)) with { Unreadable = passwords.Unreadable }; }
+                        catch (JsonException) { }
+                    }
+                }
                 files[Backup.Passwords] = JsonSerializer.SerializeToUtf8Bytes(passwords);
                 return (Backup.Seal(files, key), passwords);
             }

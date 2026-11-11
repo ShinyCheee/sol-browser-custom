@@ -11,6 +11,7 @@ public static class VideoEngine
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(12) };
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> Gates = new();
+    public static bool AudioSupported => RuntimeInformation.OSArchitecture != Architecture.X86;
     public sealed record Tools(string Downloader, string? Ffmpeg, string? Runtime = null);
     private sealed record Receipt(string File, string Hash);
 
@@ -26,6 +27,13 @@ public static class VideoEngine
         var ffmpeg = arch == Architecture.X86 || inspectOnly ? null : await AcquireAsync(root, "BtbN/FFmpeg-Builds",
             "ffmpeg-master-latest-win64-lgpl-shared.zip", true, "ffmpeg", "ffmpeg.exe", phase, ct);
         return new(downloader, ffmpeg, runtime);
+    }
+
+    public static Task<string> PrepareAudioAsync(string root, Action<string> phase, CancellationToken ct)
+    {
+        Directory.CreateDirectory(root);
+        if (RuntimeInformation.OSArchitecture == Architecture.X86) throw new IOException("Audio encoding requires 64-bit Windows");
+        return AcquireAsync(root, "BtbN/FFmpeg-Builds", "ffmpeg-master-latest-win64-lgpl-shared.zip", true, "ffmpeg", "ffmpeg.exe", phase, ct);
     }
 
     private static async Task<string> AcquireAsync(string root, string repo, string assetName, bool zip, string tool, string executableName, Action<string> phase, CancellationToken ct)

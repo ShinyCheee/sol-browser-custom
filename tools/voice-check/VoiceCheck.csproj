@@ -6,7 +6,11 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="System.Speech" Version="10.0.0" />
-    <Compile Include="../../src/Browser.App/WindowsVoice.cs" Link="WindowsVoice.cs" />
+    <PackageReference Include="NAudio.WinMM" Version="2.2.1" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.1" />
+    <ProjectReference Include="../../src/Browser.Core/Browser.Core.csproj" />
+    <Compile Include="../../src/Browser.App/SolVoice*.cs" Link="%(Filename)%(Extension)" />
+    <Content Include="../../bin/voice-runtime/**" Link="voice/runtime/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../voice-worker/worker.py;../voice-worker/engines.py" Link="voice/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

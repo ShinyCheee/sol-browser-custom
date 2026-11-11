@@ -49,7 +49,7 @@ public sealed partial class BrowserController
                 have.Add(id);
                 installed.Add(new { id, name = info.Name, version = info.Version, enabled = enabled.Value, page = true, options = info.Options is not null,
                     pinned = _settings.PinnedExtensions.Contains(id), icon = ExtensionCatalog.Icon(info.Folder),
-                    store = info.Store, update = _extensionUpdates.GetValueOrDefault(id) });
+                    store = info.Store, source = ExtensionCatalog.SourceFolder(info.Folder), update = _extensionUpdates.GetValueOrDefault(id) });
             }
         }
         // Les extensions des autres navigateurs : beaucoup de petits fichiers à lire, hors du fil de l'interface.
@@ -62,6 +62,7 @@ public sealed partial class BrowserController
         {
             popup = "extensions",
             session = _tabs.Tabs.FirstOrDefault(t => t.Id == _tabs.ActiveId)?.SessionId is { Length: > 0 } session ? _sessions.Name(session) : T("Principale", "Main"),
+            devMode = _settings.ExtensionDeveloperMode,
             updates = _extensionCheck,
             installed,
             available = _extensionOffers.Values.OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase).Select(e => new { id = e.Id, name = e.Name, version = e.Version, from = e.From }),
@@ -125,15 +126,15 @@ public sealed partial class BrowserController
     }
 
     // Récupère le paquet signé d'une extension du store et le déballe dans un dossier provisoire, que l'appelant supprime.
-    private static async Task<ExtensionInfo> DownloadStoreExtensionAsync(string id, string staging)
+    private static async Task<ExtensionInfo> DownloadStoreExtensionAsync(string id, string staging, bool edge = false)
     {
         var version = (await AdBlock.EnvironmentAsync()).BrowserVersionString.Split(' ')[0];
         using var client = new System.Net.Http.HttpClient { Timeout = System.Threading.Timeout.InfiniteTimeSpan };
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
-        using var response = await client.GetAsync(ExtensionPackage.DownloadUri(id, version), System.Net.Http.HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+        using var response = await client.GetAsync(ExtensionPackage.DownloadUri(id, version, edge), System.Net.Http.HttpCompletionOption.ResponseHeadersRead, timeout.Token);
         // Extension retirée du store, payante, ou réservée à un autre navigateur : le store répond sans paquet.
         if (response.StatusCode == System.Net.HttpStatusCode.NoContent)
-            throw new InvalidDataException(T("Le Chrome Web Store ne fournit pas cette extension (retirée, payante ou réservée à Chrome).", "The Chrome Web Store does not provide this extension (removed, paid or Chrome-only)."));
+            throw new InvalidDataException(T("Le store ne fournit pas cette extension (retirée, payante ou réservée).", "The store does not provide this extension (removed, paid or restricted)."));
         response.EnsureSuccessStatusCode();
         Directory.CreateDirectory(Path.GetDirectoryName(staging)!);
         // A sibling file cannot be mistaken for part of the unpacked extension.
@@ -165,22 +166,22 @@ public sealed partial class BrowserController
 
     private Task InstallStoreExtensionAsync(string input)
     {
-        if (StoreExtension(input) is { } id) return OfferStoreExtensionAsync(id);
-        Notice(T("Installation impossible", "Installation failed"), T("Ouvrez la fiche d’une extension sur le Chrome Web Store.", "Open an extension page on the Chrome Web Store."));
+        if (StoreExtension(input) is { } id) return OfferStoreExtensionAsync(id, ExtensionPackage.IsEdgeStore(input));
+        Notice(T("Installation impossible", "Installation failed"), T("Ouvrez la fiche d’une extension sur le Chrome Web Store ou Microsoft Edge Add-ons.", "Open an extension page on the Chrome Web Store or Microsoft Edge Add-ons."));
         return Task.CompletedTask;
     }
 
     // Télécharge l'extension, puis demande l'accord de l'utilisateur en lui montrant les accès qu'elle demande.
     // Sert aussi à une mise à jour qui demande de nouveaux accès.
-    private async Task OfferStoreExtensionAsync(string id)
+    private async Task OfferStoreExtensionAsync(string id, bool edge = false)
     {
         if (_installingExtension || PrivateActive || EngineProfile is not { } profile) return;
         _installingExtension = true;
         var staging = Path.Combine(ExtensionsDir, "store-" + Guid.NewGuid().ToString("N"));
         try
         {
-            Notice(T("Téléchargement de l’extension", "Downloading extension"), T("Le paquet signé est récupéré depuis le Chrome Web Store…", "Fetching the signed package from the Chrome Web Store…"));
-            var offered = await DownloadStoreExtensionAsync(id, staging);
+            Notice(T("Téléchargement de l’extension", "Downloading extension"), T("Le paquet signé est récupéré depuis le store…", "Fetching the signed package from the store…"));
+            var offered = await DownloadStoreExtensionAsync(id, staging, edge);
             if (_closingWindow || EngineProfile?.ProfileName != profile.ProfileName) return;
             HidePopup();
             _pendingExtension = offered;
@@ -193,7 +194,7 @@ public sealed partial class BrowserController
         }
         catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or System.Net.Http.HttpRequestException or TaskCanceledException
             or System.Security.Cryptography.CryptographicException or JsonException or InvalidOperationException or OverflowException or OperationCanceledException)
-        { Notice(T("Installation impossible", "Installation failed"), e is System.Net.Http.HttpRequestException or OperationCanceledException ? T("Le Chrome Web Store ne répond pas. Vérifiez la connexion, puis réessayez.", "The Chrome Web Store is not responding. Check the connection, then try again.") : e.Message); }
+        { Notice(T("Installation impossible", "Installation failed"), e is System.Net.Http.HttpRequestException or OperationCanceledException ? T("Le store ne répond pas. Vérifiez la connexion, puis réessayez.", "The store is not responding. Check the connection, then try again.") : e.Message); }
         finally
         {
             _installingExtension = false;
@@ -245,26 +246,29 @@ public sealed partial class BrowserController
             {
                 var engine = (await AdBlock.EnvironmentAsync()).BrowserVersionString.Split(' ')[0];
                 using var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-                var latest = ExtensionPackage.ParseUpdates(await client.GetStringAsync(ExtensionPackage.UpdateCheckUri(mine.Select(e => e.Id), engine)));
-                foreach (var current in mine)
+                foreach (var group in mine.GroupBy(e => ExtensionCatalog.IsEdgeStore(e.Folder)))
                 {
-                    if (!latest.TryGetValue(current.Id, out var version) || !Version.TryParse(current.Version, out var have) || Full(version) <= Full(have)) continue;
-                    var staging = Path.Combine(ExtensionsDir, "store-" + Guid.NewGuid().ToString("N"));
-                    try
+                    var latest = ExtensionPackage.ParseUpdates(await client.GetStringAsync(ExtensionPackage.UpdateCheckUri(group.Select(e => e.Id), engine, group.Key)));
+                    foreach (var current in group)
                     {
-                        var next = await DownloadStoreExtensionAsync(current.Id, staging);
-                        if (_closingWindow || EngineProfile?.ProfileName != profile.ProfileName) { await ShowAsync(""); return; }
-                        var before = ExtensionPermissions.Describe(current.Permissions, french: true);
-                        if (ExtensionPermissions.Describe(next.Permissions, french: true).Except(before).Any()) _extensionUpdates[current.Id] = next.Version;
-                        else if (await InstallExtensionAsync(staging, current.Id, quiet: true)) { _extensionUpdates.Remove(current.Id); updated++; }
-                    }
-                    catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or System.Net.Http.HttpRequestException
-                        or System.Security.Cryptography.CryptographicException or JsonException or InvalidOperationException or OverflowException or OperationCanceledException)
-                    { DebugLog.Write($"extension {current.Id} : mise à jour impossible : {e.Message}"); }
-                    finally
-                    {
-                        try { if (Directory.Exists(staging)) Directory.Delete(staging, true); }
-                        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { DebugLog.Write("extension temporaire : " + e.Message); }
+                        if (!latest.TryGetValue(current.Id, out var version) || !Version.TryParse(current.Version, out var have) || Full(version) <= Full(have)) continue;
+                        var staging = Path.Combine(ExtensionsDir, "store-" + Guid.NewGuid().ToString("N"));
+                        try
+                        {
+                            var next = await DownloadStoreExtensionAsync(current.Id, staging, group.Key);
+                            if (_closingWindow || EngineProfile?.ProfileName != profile.ProfileName) { await ShowAsync(""); return; }
+                            var before = ExtensionPermissions.Describe(current.Permissions, french: true);
+                            if (ExtensionPermissions.Describe(next.Permissions, french: true).Except(before).Any()) _extensionUpdates[current.Id] = next.Version;
+                            else if (await InstallExtensionAsync(staging, current.Id, quiet: true)) { _extensionUpdates.Remove(current.Id); updated++; }
+                        }
+                        catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or System.Net.Http.HttpRequestException
+                            or System.Security.Cryptography.CryptographicException or JsonException or InvalidOperationException or OverflowException or OperationCanceledException)
+                        { DebugLog.Write($"extension {current.Id} : mise à jour impossible : {e.Message}"); }
+                        finally
+                        {
+                            try { if (Directory.Exists(staging)) Directory.Delete(staging, true); }
+                            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { DebugLog.Write("extension temporaire : " + e.Message); }
+                        }
                     }
                 }
             }

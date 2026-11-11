@@ -3,7 +3,7 @@ namespace Browser.Core;
 // L'accord appartient au profil et n'est actif qu'après son enregistrement durable.
 public static class SolAiPermissions
 {
-    public static bool VoiceAvailable => false;
+    public static bool VoiceAvailable => true;
 
     public static bool TrySet(Settings settings, string path, bool enabled)
     {

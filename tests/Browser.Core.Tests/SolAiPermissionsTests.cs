@@ -14,11 +14,11 @@ public sealed class SolAiPermissionsTests : IDisposable
     public void Dispose() => Directory.Delete(_folder, true);
 
     [Fact]
-    public void DefaultRequiresApprovalAndVoiceIsUnavailable()
+    public void DefaultRequiresApprovalEvenWhenVoiceIsAvailable()
     {
         var settings = new Settings();
         Assert.False(settings.SolAiAutoApproveActions);
-        Assert.False(SolAiPermissions.VoiceAvailable);
+        Assert.True(SolAiPermissions.VoiceAvailable);
         foreach (var tool in new[] { "click", "fill", "navigate", "select_option", "set_checked", "fill_form", "press_key", "close_tabs", "browser_history" })
             Assert.True(SolAiPermissions.RequiresApproval(tool, settings));
         Assert.False(SolAiPermissions.RequiresApproval("read_page", settings));

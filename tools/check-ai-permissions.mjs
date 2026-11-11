@@ -19,10 +19,8 @@ async function openChat() {
 }
 try {
   ui=await host.launch(900,1250);const normal=await ui.evaluate('window.__sidebarState.activeId');await openChat();
-  assert.equal(await chat.evaluate(`document.querySelectorAll('[aria-label="Mode vocal"],[aria-label="Voice mode"],.sol-voice,[data-slot=voice-orb]').length`),0);
-  for(const type of ['voice.open','voice.listen','voice.settings']) {
-    await command({type});await host.wait(()=>chat.evaluate('__native.at(-1)?.voice?.available===false&&!__native.at(-1).voice.open'),'voice blocked');
-  }
+  assert.equal(await chat.evaluate(`document.querySelectorAll('[aria-label="Mode vocal"],[aria-label="Voice mode"]').length`),0,'voice uses its keyboard shortcut');
+  assert.equal(await chat.evaluate('document.querySelectorAll(".sol-voice,[data-slot=voice-orb]").length'),0,'voice remains closed until requested');
   assert.equal(await chat.evaluate('performance.getEntriesByType("resource").some(r=>r.name.includes("/SolVoice-"))'),false,'voice chunk is not loaded');
   await command({type:'settings.open',x:500,y:58});const popup=await host.connect('#popup');
   await host.wait(()=>popup.evaluate('!!document.querySelector(".settings-nav")'),'settings');
@@ -56,6 +54,6 @@ try {
   await command({type:'settings.set',id:'aiAutoApproveActions',index:1});await command({type:'tab.activate',id:normal});
   await host.wait(()=>ui.evaluate('!window.__sidebarState.privateMode'),'normal context');
   assert.equal((await settings()).SolAiAutoApproveActions,false,'private context cannot alter permission');
-  await writeFile(resolve(host.base,'permissions-ui.json'),JSON.stringify({voiceHidden:true,microphoneUsed:false,persistence:true,revocation:true,privateIsolation:true,staleCardRejected:true,realChatGptInference:false},null,2));
-  await host.close(ui);console.log('PASS voice hidden/blocked/lazy, settings opt-in, restart, revoke, chat approval at 220/380/520px light/dark, stale card and private isolation; '+host.base);
+  await writeFile(resolve(host.base,'permissions-ui.json'),JSON.stringify({voiceClosed:true,microphoneUsed:false,persistence:true,revocation:true,privateIsolation:true,staleCardRejected:true,realChatGptInference:false},null,2));
+  await host.close(ui);console.log('PASS voice opt-in/lazy, settings opt-in, restart, revoke, chat approval at 220/380/520px light/dark, stale card and private isolation; '+host.base);
 } finally {await host.dispose();await assert.rejects(access(host.profile));}

@@ -75,9 +75,26 @@ public class ExtensionPackageTests
                 """);
             var info = ExtensionCatalog.Read(folder, "eimadpbcbfnmbkopoojfekhnkhdbieeh")!;
             Assert.True(info.Store);
+            Assert.False(ExtensionCatalog.IsEdgeStore(folder));
             Assert.Equal(["storage", "<all_urls>"], info.Permissions!);
             ExtensionCatalog.EnsureKey(folder);
             Assert.Contains("\"key\"", File.ReadAllText(Path.Combine(folder, "manifest.json")));
+
+            var devSource = folder + "-dev";
+            Directory.CreateDirectory(devSource);
+            try
+            {
+                File.WriteAllText(Path.Combine(devSource, "manifest.json"), """{"manifest_version":3,"name":"Dev v2","version":"2.0","action":{"default_popup":"p.html"}}""");
+                ExtensionCatalog.SaveSource(folder, devSource);
+                Assert.True(ExtensionCatalog.RefreshFromSource(folder));
+                var marker = ExtensionAction.Marker(folder);
+                Assert.NotNull(marker);
+                Assert.True(ExtensionCatalog.RefreshFromSource(folder));
+                Assert.Equal(devSource, ExtensionCatalog.SourceFolder(folder));
+                Assert.Equal(marker, ExtensionAction.Marker(folder));
+                Assert.Equal("2.0", ExtensionCatalog.Read(folder, "eimadpbcbfnmbkopoojfekhnkhdbieeh")!.Version);
+            }
+            finally { if (Directory.Exists(devSource)) Directory.Delete(devSource, true); }
         }
         finally { Directory.Delete(folder, true); }
     }
@@ -119,6 +136,9 @@ public class ExtensionPackageTests
             using var manifest = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(directory, "manifest.json")));
             Assert.Equal(Convert.ToBase64String(publicKey), manifest.RootElement.GetProperty("key").GetString());
             Assert.Equal(id, ExtensionPackage.StoreId($"https://chromewebstore.google.com/detail/test/{id}?hl=fr"));
+            Assert.Equal(id, ExtensionPackage.StoreId($"https://microsoftedge.microsoft.com/addons/detail/test/{id}"));
+            Assert.True(ExtensionPackage.IsEdgeStore($"https://microsoftedge.microsoft.com/addons/detail/test/{id}"));
+            Assert.StartsWith(ExtensionPackage.EdgeStoreUpdates, ExtensionPackage.DownloadUri(id, "140.0.1.2", edge: true).AbsoluteUri);
             Assert.Throws<ArgumentException>(() => ExtensionPackage.StoreId($"https://chromewebstore.google.com.evil.test/detail/{id}"));
             package[^1] ^= 1;
             Assert.Throws<InvalidDataException>(() => ExtensionPackage.Extract(package, id, directory + "-bad"));

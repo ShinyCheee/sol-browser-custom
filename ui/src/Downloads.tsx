@@ -16,9 +16,9 @@ function status(d: Download) {
   if (d.state === 'Completed') return `${t('Terminé', 'Done')} · ${size(d.received)}`;
   if(d.canceled)return t('Annulé','Canceled');
   if(d.paused)return `${t('En pause','Paused')} · ${size(d.received)}${d.total?` / ${size(d.total)}`:''}`;
-  if(d.phase==='queued')return t('En attente · deux vidéos à la fois','Queued · two videos at a time');
+  if(d.phase==='queued')return t('En attente · deux fichiers à la fois','Queued · two files at a time');
   if(d.phase && !d.paused && !d.canceled) {
-    const phases:Record<string,string>={'engine.downloader':t('Préparation du moteur vidéo…','Preparing video engine…'),'engine.ffmpeg':t('Préparation de l’assemblage vidéo…','Preparing video merging…'),merge:t('Assemblage des pistes…','Merging tracks…'),protected:t('Vidéo protégée : téléchargement indisponible','Protected video: download unavailable'),auth:t('Accès au site refusé ou connexion nécessaire','Site denied access or sign-in required'),failed:t('Échec du téléchargement vidéo — réessayez ou choisissez une autre source','Video download failed — retry or choose another source')};
+    const phases:Record<string,string>={'engine.downloader':t('Préparation du moteur…','Preparing download engine…'),'engine.ffmpeg':t('Préparation de la conversion…','Preparing media conversion…'),merge:t('Assemblage des pistes…','Merging tracks…'),encode:t('Conversion de la piste audio…','Converting audio track…'),audioMissing:t('Cette source ne contient pas de piste audio','This source contains no audio track'),audioUnsupported:t('La conversion audio nécessite Windows 64 bits','Audio conversion requires 64-bit Windows'),protected:t('Vidéo protégée : téléchargement indisponible','Protected video: download unavailable'),auth:t('Accès au site refusé ou connexion nécessaire','Site denied access or sign-in required'),failed:t('Échec du téléchargement — réessayez ou choisissez une autre source','Download failed — retry or choose another source')};
     if(phases[d.phase])return phases[d.phase];
   }
   if (d.state === 'Interrupted') {

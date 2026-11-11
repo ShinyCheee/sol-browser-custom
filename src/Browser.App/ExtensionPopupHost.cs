@@ -52,11 +52,13 @@ public sealed class ExtensionPopupHost(Window owner)
     public bool IsOpen { get; private set; }
 
     private double Scale => owner.Content?.XamlRoot?.RasterizationScale ?? 1;
+    private bool _inspecting;
 
     /// <param name="right">Bord droit de la fenêtre (celui du bouton), dans la fenêtre du navigateur.</param>
-    public async Task ShowAsync(string url, double right, double top, string profileName, string marker, bool panel = false)
+    public async Task ShowAsync(string url, double right, double top, string profileName, string marker, bool panel = false, bool inspect = false)
     {
         var run = ++_run;
+        _inspecting = inspect;
         var origin = new Point();
         ClientToScreen(_owner, ref origin);
         _anchor = (origin.X + right * Scale, origin.Y + top * Scale);
@@ -92,6 +94,7 @@ public sealed class ExtensionPopupHost(Window owner)
             core.NewWindowRequested += (_, e) => { e.Handled = true; Hide(); TabRequested?.Invoke(e.Uri); };
             core.WindowCloseRequested += (_, _) => Hide(); // l'extension ferme sa fenêtre elle-même, une fois son action faite
             core.Navigate(url);
+            if (inspect) core.OpenDevToolsWindow();
         }
         catch (Exception e) when (e is InvalidOperationException or COMException or ObjectDisposedException)
         {
@@ -109,7 +112,7 @@ public sealed class ExtensionPopupHost(Window owner)
     {
         var window = new Window { Title = "Sol" };
         var app = window.AppWindow;
-        app.IsShownInSwitchers = false;
+        try { app.IsShownInSwitchers = false; } catch (NotImplementedException) { }
         if (app.Presenter is OverlappedPresenter presenter)
         {
             (presenter.IsResizable, presenter.IsMaximizable, presenter.IsMinimizable) = (false, false, false);
@@ -127,7 +130,7 @@ public sealed class ExtensionPopupHost(Window owner)
         var noBorder = unchecked((int)0xFFFFFFFE); // DWMWA_COLOR_NONE : coins et ombre natifs, sans contour blanc.
         applied = DwmSetWindowAttribute(hwnd, 34, ref noBorder, sizeof(int)); // DWMWA_BORDER_COLOR (Windows 11)
         if (applied != 0) DebugLog.Write($"fenêtre d'extension : suppression du contour refusée (0x{applied:X8})");
-        window.Activated += (_, e) => { if (e.WindowActivationState == WindowActivationState.Deactivated) Hide(); }; // clic ailleurs
+        window.Activated += (_, e) => { if (e.WindowActivationState == WindowActivationState.Deactivated && !_inspecting) Hide(); }; // clic ailleurs
         app.Closing += (_, e) => { if (!_ownerClosed) { e.Cancel = true; Hide(); } }; // Alt+F4 : elle se cache, elle resservira
         owner.Closed += (_, _) => { _ownerClosed = true; CloseView(); window.Close(); };
         return window;

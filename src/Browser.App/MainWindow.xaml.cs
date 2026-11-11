@@ -116,12 +116,17 @@ public sealed partial class MainWindow : Window
             Root.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, r, g, b));
             pages.SetPageColor(r, g, b); // la barre d'état d'un appareil simulé prend la couleur de la page
         };
+        var uiFolder = Path.Combine(AppContext.BaseDirectory, "ui");
         var popupBridge = new UiBridge(Popup, "index.html#popup");
         bridge.AttachPopup(popupBridge);
-        var popup = new PopupHost(PopupFrame, Popup, popupBridge);
+        PopupHost? popup = null;
+        popup = new PopupHost(PopupFrame, Popup, popupBridge, () => popupBridge.InitAsync(uiFolder, c =>
+        {
+            if (c.Type == "ui.ready") popup!.Ready();
+            else _controller!.Execute(c);
+        }));
         var captureBridge = new UiBridge(CaptureControls, "index.html#capture");
         bridge.AttachPopup(captureBridge);
-        var uiFolder = Path.Combine(AppContext.BaseDirectory, "ui");
         PopupHost? capture = null;
         capture = new PopupHost(CaptureFrame, CaptureControls, captureBridge, () => captureBridge.InitAsync(uiFolder, c =>
         {
@@ -136,7 +141,7 @@ public sealed partial class MainWindow : Window
         var dock = new DockHost(DockFrame, Dock, dockBridge, () => dockBridge.InitAsync(uiFolder, c => _controller!.Execute(c)));
         var panelBridge = new UiBridge(Panel, "index.html#panel");
         bridge.AttachPopup(panelBridge);
-        var panel = new PanelHost(PanelRow, panelBridge, () => panelBridge.InitAsync(uiFolder, c => _controller!.Execute(c)), settings);
+        var panel = new PanelHost(PanelRow, Panel, panelBridge, () => panelBridge.InitAsync(uiFolder, c => _controller!.Execute(c)), settings);
         WirePanelGrip(panel, settings);
         var welcomeBridge = new UiBridge(Welcome, "index.html#welcome");
         bridge.AttachPopup(welcomeBridge);
@@ -162,8 +167,6 @@ public sealed partial class MainWindow : Window
         WireGestures();
 
         await bridge.InitAsync(uiFolder, _controller.Execute);
-        await popupBridge.InitAsync(uiFolder, _controller.Execute);
-        popup.Hide();
         dock.Hide();
     }
 

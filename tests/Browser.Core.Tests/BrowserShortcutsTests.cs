@@ -13,6 +13,9 @@ public class BrowserShortcutsTests
         Assert.Equal("Ctrl+Maj+P", BrowserShortcuts.TextFor("palette.open", false));
         Assert.Equal("Ctrl+Shift+P", BrowserShortcuts.TextFor("palette.open", true));
         Assert.Equal("F9", BrowserShortcuts.TextFor("reader.toggle", false));
+        Assert.Equal("Ctrl+M", BrowserShortcuts.TextFor("voice.toggle", false));
+        Assert.Single(shortcuts, s => s.Action.StartsWith("voice.", StringComparison.Ordinal));
+        Assert.Equal(new Command("voice.toggle"), CommandParser.Parse("{\"type\":\"voice.toggle\"}"));
         Assert.All(shortcuts.Where(s => (s.Modifiers & 1) != 0), alt =>
             Assert.Contains(shortcuts, alternative => alternative.Action == alt.Action && (alternative.Modifiers & 1) == 0));
         Assert.Null(CommandParser.Parse("""{"type":"design.toggle"}"""));

@@ -84,7 +84,7 @@ public static class PasswordBackup
         return ProtectedData.Protect(JsonSerializer.SerializeToUtf8Bytes(document), null, DataProtectionScope.CurrentUser);
     }
 
-    internal static PasswordBackupDocument Merge(PasswordBackupDocument first, PasswordBackupDocument second) => new(1,
+    public static PasswordBackupDocument Merge(PasswordBackupDocument first, PasswordBackupDocument second) => new(1,
         first.Profiles.Concat(second.Profiles).GroupBy(p => p.SessionId)
             .Select(g => new PasswordBackupProfile(g.Key, g.SelectMany(p => p.Logins).Distinct().ToArray())).ToArray());
 }

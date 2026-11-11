@@ -14,6 +14,7 @@ public sealed class DockHost(Grid frame, WebView2 view, UiBridge bridge, Func<Ta
     private string? _last;
     private bool _tracksBounds;
     private double _requestedWidth, _requestedHeight;
+    private readonly UiViewRest _rest = new(view, () => frame.Visibility == Visibility.Visible, "dock");
 
     public bool Visible => frame.Visibility == Visibility.Visible;
 
@@ -23,6 +24,7 @@ public sealed class DockHost(Grid frame, WebView2 view, UiBridge bridge, Func<Ta
         _last = json;
         if (_started)
         {
+            _rest.Wake();
             bridge.Post(json);
             // Une nouvelle carte de même hauteur ne déclenche pas forcément le ResizeObserver.
             if (!Visible && _requestedWidth > 0 && _requestedHeight > 0) SetSize(_requestedWidth, _requestedHeight);
@@ -75,5 +77,6 @@ public sealed class DockHost(Grid frame, WebView2 view, UiBridge bridge, Func<Ta
         _last = null; // invalide aussi les réponses Ready/size encore en vol
         if (Visible) DebugLog.Write("dock.hidden");
         frame.Visibility = Visibility.Collapsed;
+        if (_started) _rest.Rest();
     }
 }

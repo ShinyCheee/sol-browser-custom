@@ -8,34 +8,42 @@ namespace Browser.Core;
 /// <summary>Paquets signés du Chrome Web Store. Aucune URL de téléchargement arbitraire.</summary>
 public static class ExtensionPackage
 {
-    /// <summary>Service de paquets et de mises à jour du Chrome Web Store, le seul que Sol interroge.</summary>
+    /// <summary>Services de paquets et de mises à jour du Chrome Web Store et de Microsoft Edge Add-ons.</summary>
     public const string StoreUpdates = "https://clients2.google.com/service/update2/crx";
+    public const string EdgeStoreUpdates = "https://edge.microsoft.com/extensionwebstorebase/v1/crx";
 
     /// <summary>Un manifeste d'extension peut porter des commentaires et des virgules finales : les navigateurs les acceptent.</summary>
     public static readonly System.Text.Json.JsonDocumentOptions Lenient = new() { CommentHandling = System.Text.Json.JsonCommentHandling.Skip, AllowTrailingCommas = true };
 
+    public static bool IsEdgeStore(string input) =>
+        Uri.TryCreate(input.Trim(), UriKind.Absolute, out var url) && url.Scheme == "https"
+        && url.Host == "microsoftedge.microsoft.com" && url.AbsolutePath.StartsWith("/addons/", StringComparison.Ordinal);
+
     public static string StoreId(string input)
     {
         if (!Uri.TryCreate(input.Trim(), UriKind.Absolute, out var url) || url.Scheme != "https"
-            || url.Host != "chromewebstore.google.com" || !url.AbsolutePath.StartsWith("/detail/", StringComparison.Ordinal))
-            throw new ArgumentException("Ouvrez la fiche d’une extension sur le Chrome Web Store.");
+            || !((url.Host == "chromewebstore.google.com" && url.AbsolutePath.StartsWith("/detail/", StringComparison.Ordinal))
+                || (url.Host == "microsoftedge.microsoft.com" && url.AbsolutePath.StartsWith("/addons/detail/", StringComparison.Ordinal))))
+            throw new ArgumentException("Ouvrez la fiche d’une extension sur le Chrome Web Store ou Microsoft Edge Add-ons.");
         var id = url.AbsolutePath.TrimEnd('/').Split('/').Last();
         return ExtensionCatalog.IsId(id) ? id : throw new ArgumentException("Identifiant d’extension invalide.");
     }
 
-    public static Uri DownloadUri(string id, string version)
+    public static Uri DownloadUri(string id, string version, bool edge = false)
     {
         if (!ExtensionCatalog.IsId(id) || !Version.TryParse(version, out _)) throw new ArgumentException("Extension ou moteur invalide.");
-        return new Uri($"{StoreUpdates}?response=redirect&prodversion={version}&acceptformat=crx3&x="
+        var service = edge ? EdgeStoreUpdates : StoreUpdates;
+        return new Uri($"{service}?response=redirect&prodversion={version}&acceptformat=crx3&x="
             + Uri.EscapeDataString($"id={id}&installsource=ondemand&uc"));
     }
 
     /// <summary>Demande au store la dernière version de chaque extension donnée.</summary>
-    public static Uri UpdateCheckUri(IEnumerable<string> ids, string version)
+    public static Uri UpdateCheckUri(IEnumerable<string> ids, string version, bool edge = false)
     {
         var asked = ids.Distinct().ToList();
         if (asked.Count == 0 || !asked.All(ExtensionCatalog.IsId) || !Version.TryParse(version, out _)) throw new ArgumentException("Extension ou moteur invalide.");
-        return new Uri($"{StoreUpdates}?response=updatecheck&prodversion={version}&acceptformat=crx3"
+        var service = edge ? EdgeStoreUpdates : StoreUpdates;
+        return new Uri($"{service}?response=updatecheck&prodversion={version}&acceptformat=crx3"
             + string.Concat(asked.Select(id => "&x=" + Uri.EscapeDataString($"id={id}&v=0&uc"))));
     }
 

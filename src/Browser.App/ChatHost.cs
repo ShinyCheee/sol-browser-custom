@@ -15,6 +15,7 @@ public sealed class ChatHost
     private readonly UiBridge _bridge;
     private readonly Func<Task> _init;
     private Task? _initializing;
+    private readonly UiViewRest _rest;
     public bool IsOpen { get; private set; }
 
     public const double DefaultWidth = SidePanelLayout.ChatDefault;
@@ -22,6 +23,7 @@ public sealed class ChatHost
     {
         (_area, _column, _view, _bridge, _init) = (area, column, view, bridge, init);
         (_grip, _settings) = (grip, settings);
+        _rest = new UiViewRest(view, () => IsOpen, "chat", suspend: false);
         area.SizeChanged += (_, _) => Rescale();
     }
     public void Resize(double width)
@@ -46,14 +48,21 @@ public sealed class ChatHost
     }
     public async Task ShowAsync()
     {
-        IsOpen = true; Rescale(); _view.Visibility = Visibility.Visible;
-        try { await (_initializing ??= _init()); }
+        IsOpen = true; _rest.Wake(); Rescale(); _view.Visibility = Visibility.Visible;
+        try
+        {
+            await (_initializing ??= _init());
+            if (IsOpen) { _rest.Wake(); _bridge.Post("""{"event":"chat.visibility","open":true}"""); }
+            else _rest.Rest();
+        }
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException or IOException)
         { _initializing = null; Hide(); DebugLog.Write("chat.init " + e.GetType().Name); }
     }
     public void Hide()
     {
-        IsOpen = false; _column.Width = new GridLength(0); _view.Visibility = Visibility.Collapsed; _grip.Visibility = Visibility.Collapsed;
+        IsOpen = false; _bridge.Post("""{"event":"chat.visibility","open":false}""");
+        _column.Width = new GridLength(0); _view.Visibility = Visibility.Collapsed; _grip.Visibility = Visibility.Collapsed;
+        _rest.Rest();
     }
     public void Post(string json) => _bridge.Post(json);
 }

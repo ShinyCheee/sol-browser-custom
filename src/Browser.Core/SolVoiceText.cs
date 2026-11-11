@@ -6,7 +6,7 @@ public static class SolVoiceText
 {
     public static string ForSpeech(string markdown)
     {
-        var text = Regex.Replace(markdown, @"```[\s\S]*?```", " ", RegexOptions.None, TimeSpan.FromSeconds(1));
+        var text = VoiceMarkdown.MaskCode(markdown, out _);
         text = Regex.Replace(text, @"!?\[([^\]]+)\]\([^\)]+\)", "$1", RegexOptions.None, TimeSpan.FromSeconds(1));
         text = Regex.Replace(text, @"https?://\S+|<[^>]+>|\|", " ", RegexOptions.None, TimeSpan.FromSeconds(1));
         text = Regex.Replace(text, @"[#*_`>]", "", RegexOptions.None, TimeSpan.FromSeconds(1));

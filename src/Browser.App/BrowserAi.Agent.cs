@@ -82,7 +82,7 @@ public sealed partial class BrowserController
         using var registration = ct.Register(() => answer.TrySetResult(false));
         var approved = await answer.Task;
         trace.Pending = null;
-        if (ReferenceEquals(trace, _chatTrace) && _voice?.Mode == "speaking") _voice.Stop();
+        if (ReferenceEquals(trace, _chatTrace) && _voiceTurn && !ct.IsCancellationRequested) _voice?.BeginResponse();
         return approved;
     }
 

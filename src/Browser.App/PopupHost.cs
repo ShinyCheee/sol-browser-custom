@@ -10,6 +10,8 @@ namespace Browser.App;
 /// </summary>
 public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge, Func<Task>? init = null)
 {
+    private UiViewRest? _rest;
+    private UiViewRest Rest => _rest ??= new(view, () => IsOpen, "popup");
     private bool _started, _ready = init is null;
     private string? _content;
     private const double Edge = 10;
@@ -45,6 +47,7 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge, Func<T
         _pending = true;
         _focus = focus;
         _content = contentJson;
+        Rest.Wake();
         if (_ready) Ready();
         else if (!_started) { _started = true; _ = InitAsync(); }
     }
@@ -59,7 +62,12 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge, Func<T
     public void Ready()
     {
         _ready = true;
-        if (!_pending || _content is null) return;
+        if (!_pending || _content is null)
+        {
+            if (frame.Visibility != Visibility.Visible) Rest.Rest();
+            return;
+        }
+        Rest.Wake();
         bridge.ReplayTheme();
         bridge.Post("""{"fresh":true}""");
         bridge.Post(_content);
@@ -88,7 +96,12 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge, Func<T
         _bottom = true;
     }
 
-    public void SetVisible(bool visible) => frame.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+    public void SetVisible(bool visible)
+    {
+        if (visible) Rest.Wake();
+        frame.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        if (!visible) Rest.Rest();
+    }
 
     public void SetSelection(bool selecting)
     {
@@ -96,6 +109,7 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge, Func<T
         if (!selecting) { _bottom = true; SetHeight(100); return; }
         var window = (FrameworkElement)frame.Parent;
         _bottom = false;
+        Rest.Wake();
         frame.Width = window.ActualWidth; frame.Height = window.ActualHeight;
         frame.Margin = new Thickness(0); frame.Visibility = Visibility.Visible;
         CornerClip.Set(view, 0);
@@ -127,7 +141,7 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge, Func<T
         if (_bottom) { x = (window.ActualWidth - frame.Width) / 2; y = window.ActualHeight - frame.Height - 18; }
         frame.Margin = new Thickness(x, y, 0, 0);
 
-        frame.Visibility = Visibility.Visible;
+        Rest.Wake(); frame.Visibility = Visibility.Visible;
         frame.UpdateLayout();
         CornerClip.Set(view, Radius * (float)(UiBridge.Settings?.UiFactor ?? 0.92));
         if (_pending && _focus) view.Focus(FocusState.Programmatic);
@@ -140,5 +154,6 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge, Func<T
         _pending = false;
         _selecting = false;
         frame.Visibility = Visibility.Collapsed;
+        if (_ready) Rest.Rest();
     }
 }

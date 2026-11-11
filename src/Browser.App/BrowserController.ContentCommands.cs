@@ -37,9 +37,9 @@ public sealed partial class BrowserController
             case "reader.toggle": _ = ToggleReaderAsync(id); break;
             case "video.open": OpenVideos(id); return true;
             case "video.inspect": _ = InspectVideoAsync(id, c.Query!); return true;
-            case "video.download": _ = DownloadVideoAsync(id, c.Query!, c.Index!.Value); return true;
+            case "video.download": _ = DownloadVideoAsync(id, c.Query!, c.Index!.Value, c.Output); return true;
             case "video.collection": _ = InspectVideoCollectionAsync(id, c.Query!, c.Index!.Value); return true;
-            case "video.batch": _ = DownloadVideoCollectionAsync(id, c.Query!, c.Input!, c.Index!.Value); return true;
+            case "video.batch": _ = DownloadVideoCollectionAsync(id, c.Query!, c.Input!, c.Index!.Value, c.Output); return true;
             case "webapp.info":
                 if (_pages.WebAppOf(id) is { } app)
                     Notice(app.Name, T($"Ce site propose une application web progressive (PWA).\nAdresse de lancement : {app.StartUrl}",

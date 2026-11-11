@@ -70,7 +70,7 @@ public sealed partial class BrowserController
         if (files is null) { _cloudError = "key"; return; }
         await Task.Run(() => Backup.Stage(AppPaths.DataDir, files));
         // La même clé continue les sauvegardes automatiques sur ce PC.
-        _cloud = _cloud with { AutoKey = key, LastBackup = DateTimeOffset.UtcNow };
+        _cloud = _cloud with { AutoKey = key, LastBackup = DateTimeOffset.UtcNow, BackupId = id };
         SaveCloud();
         _settings.Onboarded = true;
         JsonFileStore.Save(AppPaths.Settings, _settings);

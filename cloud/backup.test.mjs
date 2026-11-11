@@ -91,3 +91,15 @@ test('storage failure never releases quota for an expired upload', async () => {
   f.setFailDelete(false); await storage.cleanup();
   assert.equal(await storage.reserve('alice', randomUUID(), 20), true);
 });
+test('replace updates the existing device backup in place without creating duplicates', async () => {
+  const f = fixture();
+  const first = await (await f.call('/backups/uploads', {bytes: sealed.length})).json();
+  f.objects.set(objectKey('alice', first.id), {body: sealed, modified: Date.now()});
+  assert.equal((await f.call(`/backups/uploads/${first.id}`, {device: 'PC', replace: true})).status, 201);
+  const second = await (await f.call('/backups/uploads', {bytes: sealed.length})).json();
+  f.objects.set(objectKey('alice', second.id), {body: sealed, modified: Date.now()});
+  assert.equal((await f.call(`/backups/uploads/${second.id}`, {device: 'PC', replace: true})).status, 201);
+  assert.equal(f.backups.size, 1);
+  assert.ok(f.backups.has(second.id));
+  assert.ok(!f.objects.has(objectKey('alice', first.id)));
+});

@@ -44,6 +44,8 @@ export default function Popup() {
     window.addEventListener('focus', focused);
     const key = (e: KeyboardEvent) => e.key === 'Escape' && close();
     window.addEventListener('keydown', key);
+    // The native host loads this view only when first needed; listeners must exist before replay.
+    send({type:'ui.ready'});
     return () => {
       off();
       window.clearTimeout(leaving);

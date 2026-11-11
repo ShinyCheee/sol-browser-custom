@@ -144,6 +144,7 @@ public sealed partial class BrowserController
     }
     private object AiState() => new
     {
+        voice = VoiceState(),
         connected = !PrivateActive && _chatGpt.Tokens != null, ready = AiReady, email = PrivateActive ? "" : _chatGpt.Tokens?.Email ?? "",
         signingIn = !PrivateActive && _chatGpt.SigningIn, error = PrivateActive ? null : _chatGpt.Error, isPrivate = PrivateActive,
         tone = _settings.SolAiTone, length = _settings.SolAiLength,

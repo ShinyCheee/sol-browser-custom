@@ -5,15 +5,17 @@ import {t} from './i18n';
 import AnimatedIcon from './AnimatedIcon';
 import {VideoQualities,qualityLabel} from './VideoQualities';
 import {VideoCollectionPicker,type VideoCollectionContent} from './VideoCollectionPicker';
+import {VideoOutput,outputLabel,type VideoOutputFormat} from './VideoOutput';
 import './video-picker.css';
 
 export type VideoContent = {popup:'videos';id:string;title:string;protectedMedia:boolean;
   phase:string;sourceId:string;qualities:number[];preferred:number;selected:number;
-  collection?:VideoCollectionContent;
+  collection?:VideoCollectionContent;audioAvailable?:boolean;
   items:{id:string;label:string;kind:'page'|'file'|'hls'|'dash';host:string}[]};
 
 export default function VideoPicker({content}:{content:VideoContent}) {
   const [quality,setQuality]=useState(content.selected);
+  const [output,setOutput]=useState<VideoOutputFormat>('video');
   const identity=`${content.id}:${content.title}:${content.sourceId}`,previous=useRef(identity);
   useEffect(()=>{
     const changed=previous.current!==identity;previous.current=identity;
@@ -25,10 +27,10 @@ export default function VideoPicker({content}:{content:VideoContent}) {
   const failed=content.phase==='failed';
   const busy=!!content.phase&&!ready&&!failed;
   if(content.collection)return <VideoCollectionPicker content={content}/>;
-  return <section className="video-picker" aria-label={t('Télécharger une vidéo','Download a video')}>
+  return <section className="video-picker" aria-label={output==='video'?t('Télécharger une vidéo','Download a video'):t('Télécharger l’audio','Download audio')}>
     <header className="video-header">
       <span className="video-heading-icon"><AnimatedIcon name="download" size={22}/></span>
-      <div><h2>{t('Télécharger la vidéo','Download video')}</h2><span>{t('Depuis cette page','From this page')}</span></div>
+      <div><h2>{output==='video'?t('Télécharger la vidéo','Download video'):t('Télécharger l’audio','Download audio')}</h2><span>{t('Depuis cette page','From this page')}</span></div>
       <Button variant="ghost" size="icon" className="video-close" aria-label={t('Fermer','Close')} onClick={()=>send({type:'popup.close'})}><AnimatedIcon name="close" size={20}/></Button>
     </header>
     <p className="video-page-title">{content.title}</p>
@@ -44,14 +46,17 @@ export default function VideoPicker({content}:{content:VideoContent}) {
         <AnimatedIcon name="back" size={16}/>{t('Toutes les sources','All sources')}
       </Button>}
       {ready?<>
+        <VideoOutput value={output} onChange={setOutput} audioAvailable={content.audioAvailable!==false}/>
+        {output==='video'&&<>
         <div className="video-quality-heading"><h3>{t('Choisir la qualité','Choose quality')}</h3><span>{content.qualities.length} {t('disponibles','available')}</span></div>
         <VideoQualities values={content.qualities} value={selected} preferred={content.preferred} onChange={setQuality}/>
         {content.preferred>0&&!content.qualities.includes(content.preferred)&&<p role="status" className="video-help">
           {t(`${qualityLabel(content.preferred)} indisponible. Nous proposons ${qualityLabel(content.selected)} ; vous pouvez choisir une autre qualité.`,
             `${qualityLabel(content.preferred)} unavailable. We suggest ${qualityLabel(content.selected)}; you can choose another quality.`)}
         </p>}
-        <Button variant="primary" size="lg" className="video-download-btn" onClick={()=>send({type:'video.download',id:content.id,query:content.sourceId,index:selected})}>
-          <AnimatedIcon name="download" size={20}/><span>{t('Télécharger','Download')} · {qualityLabel(selected)}</span>
+        </>}
+        <Button variant="primary" size="lg" className="video-download-btn" onClick={()=>send({type:'video.download',id:content.id,query:content.sourceId,index:selected,output})}>
+          <AnimatedIcon name="download" size={20}/><span>{t('Télécharger','Download')} · {output==='video'?qualityLabel(selected):outputLabel(output)}</span>
         </Button>
         <p className="video-help">{t('Suivez la progression dans Téléchargements.','Follow progress in Downloads.')}</p>
       </>:content.phase?<div className="video-status" role="status" aria-busy={busy}>

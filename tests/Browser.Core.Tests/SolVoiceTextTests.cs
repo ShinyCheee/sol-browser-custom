@@ -24,5 +24,9 @@ public sealed class SolVoiceTextTests
     [InlineData("voice.stop")]
     [InlineData("voice.close")]
     [InlineData("voice.settings")]
+    [InlineData("voice.install")]
+    [InlineData("voice.cancelInstall")]
+    [InlineData("voice.finish")]
+    [InlineData("voice.interrupt")]
     public void VoiceCommandsAreAcceptedByTheNativeBridge(string type) => Assert.NotNull(CommandParser.Parse("{\"type\":\"" + type + "\"}"));
 }

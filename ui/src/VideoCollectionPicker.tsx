@@ -6,6 +6,7 @@ import {VideoQualities,qualityLabel} from './VideoQualities';
 import type {VideoContent} from './VideoPicker';
 import {send} from './bridge';
 import {t} from './i18n';
+import {VideoOutput,outputLabel,type VideoOutputFormat} from './VideoOutput';
 
 export type VideoCollectionContent = {token:string;mode:'playlist'|'page';start:number;more:boolean;
   entries:{key:string;title:string;position:number;host:string}[]};
@@ -14,16 +15,17 @@ export function VideoCollectionPicker({content}:{content:VideoContent}) {
   const collection=content.collection!;
   const [checked,setChecked]=useState<Set<string>>(()=>new Set());
   const [quality,setQuality]=useState(content.preferred);
+  const [output,setOutput]=useState<VideoOutputFormat>('video');
   useEffect(()=>setChecked(new Set()),[collection.token]);
   const selected=collection.entries.filter(entry=>checked.has(entry.key));
   const busy=content.phase!=='ready'&&content.phase!=='failed';
   const all=selected.length>0&&selected.length===collection.entries.length;
   const load=(start:number)=>send({type:'video.collection',id:content.id,query:collection.mode,index:start});
-  return <section className="video-picker" aria-label={t('Télécharger plusieurs vidéos','Download multiple videos')}>
+  return <section className="video-picker" aria-label={output==='video'?t('Télécharger plusieurs vidéos','Download multiple videos'):t('Télécharger plusieurs pistes audio','Download multiple audio tracks')}>
     <header className="video-header">
       <span className="video-heading-icon"><AnimatedIcon name="download" size={22}/></span>
       <div><h2>{collection.mode==='playlist'?t('Playlist','Playlist'):t('Vidéos de la page','Videos on this page')}</h2>
-        <span>{t('Sélectionnez les vidéos à télécharger','Select the videos to download')}</span></div>
+        <span>{output==='video'?t('Sélectionnez les vidéos à télécharger','Select the videos to download'):t('Sélectionnez les vidéos dont extraire l’audio','Select videos to extract audio from')}</span></div>
       <Button variant="ghost" size="icon" className="video-close" aria-label={t('Fermer','Close')} onClick={()=>send({type:'popup.close'})}><AnimatedIcon name="close" size={20}/></Button>
     </header>
     <Button variant="ghost" size="sm" className="video-back" onClick={()=>send({type:'video.open',id:content.id})}>
@@ -52,13 +54,16 @@ export function VideoCollectionPicker({content}:{content:VideoContent}) {
           <Button variant="ghost" size="sm" disabled={!collection.more} onClick={()=>load(collection.start+100)}>{t('Suivantes','Next')}</Button>
         </nav>}
         {collection.entries.length>0&&<>
+          <VideoOutput value={output} onChange={setOutput} audioAvailable={content.audioAvailable!==false}/>
+          {output==='video'&&<>
           <h3 className="video-batch-quality">{t('Qualité souhaitée pour chaque vidéo','Preferred quality for each video')}</h3>
           <VideoQualities values={[0,480,720,1080,1440,2160,4320]} value={quality} preferred={content.preferred} onChange={setQuality}/>
           <p className="video-help">{t('Chaque vidéo utilise la meilleure qualité disponible jusqu’à votre choix. Si aucune qualité inférieure n’existe, la plus proche au-dessus est utilisée. Deux téléchargements à la fois.',
             'Each video uses the best available quality up to your choice. If no lower quality exists, the nearest higher one is used. Two downloads at a time.')}</p>
+          </>}
           <Button variant="primary" size="lg" className="video-download-btn" disabled={!selected.length} onClick={()=>send({
-            type:'video.batch',id:content.id,query:collection.token,input:JSON.stringify(selected.map(entry=>entry.key)),index:quality,
-          })}><AnimatedIcon name="download" size={20}/><span>{t(`Télécharger ${selected.length} vidéo${selected.length>1?'s':''}`,`Download ${selected.length} video${selected.length>1?'s':''}`)} · {qualityLabel(quality)}</span></Button>
+            type:'video.batch',id:content.id,query:collection.token,input:JSON.stringify(selected.map(entry=>entry.key)),index:quality,output,
+          })}><AnimatedIcon name="download" size={20}/><span>{output==='video'?t(`Télécharger ${selected.length} vidéo${selected.length>1?'s':''}`,`Download ${selected.length} video${selected.length>1?'s':''}`):t(`Télécharger ${selected.length} fichier${selected.length>1?'s':''} audio`,`Download ${selected.length} audio file${selected.length>1?'s':''}`)} · {output==='video'?qualityLabel(quality):outputLabel(output)}</span></Button>
         </>}
         <p className="video-help">{t('Seuls les éléments cochés sont ajoutés à Téléchargements. Les vidéos privées, supprimées, en direct ou protégées peuvent être indisponibles.','Only checked items are added to Downloads. Private, deleted, live or protected videos may be unavailable.')}</p>
       </>}

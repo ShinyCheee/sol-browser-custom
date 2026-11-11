@@ -56,7 +56,7 @@ public sealed class CloudAccount(HttpClient http, string authUrl, string apiUrl)
 
     // La passerelle du service refuse les corps de plus de ~10 Mo : le fichier scellé part directement au stockage par une
     // adresse signée pour lui seul, puis le service le valide et l'ajoute à la liste du compte.
-    public async Task UploadAsync(string session, byte[] sealedFile, string device, CancellationToken ct = default)
+    public async Task<string> UploadAsync(string session, byte[] sealedFile, string device, bool replace = true, CancellationToken ct = default)
     {
         if (sealedFile.Length > MaxBytes) throw new CloudException("too-large");
         string id, url;
@@ -69,7 +69,8 @@ public sealed class CloudAccount(HttpClient http, string authUrl, string apiUrl)
             using var put = await SendAsync(new HttpRequestMessage(HttpMethod.Put, url) { Content = content }, ct);
             if (!put.IsSuccessStatusCode) throw new CloudException("server");
         }
-        using var _ = await ApiAsync(session, HttpMethod.Post, "/backups/uploads/" + Uri.EscapeDataString(id), Json(new { device }), ct);
+        using var _ = await ApiAsync(session, HttpMethod.Post, "/backups/uploads/" + Uri.EscapeDataString(id), Json(new { device, replace }), ct);
+        return id;
     }
 
     public async Task<byte[]> DownloadAsync(string session, string id, CancellationToken ct = default)

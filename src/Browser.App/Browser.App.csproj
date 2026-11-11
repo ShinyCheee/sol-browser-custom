@@ -19,18 +19,21 @@
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <EnableMsixTooling>true</EnableMsixTooling>
-    <Version>1.2.7</Version>
+    <Version>1.2.10</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.*" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.*" />
-    <PackageReference Include="System.Speech" Version="10.0.0" />
+    <PackageReference Include="NAudio.WinMM" Version="2.2.1" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.1" GeneratePathProperty="true" />
     <PackageReference Include="Velopack" Version="1.2.161" />
     <ProjectReference Include="..\Browser.Core\Browser.Core.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="$(PkgMicrosoft_ML_OnnxRuntime)\LICENSE" Link="voice\ONNXRuntime-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="$(PkgMicrosoft_ML_OnnxRuntime)\ThirdPartyNotices.txt" Link="voice\ONNXRuntime-ThirdPartyNotices.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <!-- Interface React compilée (npm run build dans ui/) -->
     <Content Include="inject\**" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\ui\node_modules\@mozilla\readability\Readability.js" Link="inject\Readability.js" CopyToOutputDirectory="PreserveNewest" />
@@ -39,4 +42,13 @@
     <Content Include="extensions\**" Exclude="extensions\ubol\**" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\ui\dist\**" Link="ui\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <Target Name="PrepareSolVoice" BeforeTargets="PrepareForBuild;AssignTargetPaths" Condition="'$(RuntimeIdentifier)' == 'win-x64' And '$(DesignTimeBuild)' != 'true'">
+    <Exec Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\..\tools\prepare-voice-runtime.ps1&quot;" />
+    <ItemGroup>
+      <_VoiceRuntimeFiles Include="$(MSBuildProjectDirectory)\..\..\bin\voice-runtime\**\*" Exclude="$(MSBuildProjectDirectory)\..\..\bin\voice-runtime\**\__pycache__\**;$(MSBuildProjectDirectory)\..\..\bin\voice-runtime\**\*.pyc" />
+      <_VoiceSourceFiles Include="$(MSBuildProjectDirectory)\..\..\tools\voice-worker\worker.py;$(MSBuildProjectDirectory)\..\..\tools\voice-worker\engines.py;$(MSBuildProjectDirectory)\..\..\tools\voice-worker\NOTICE.md;$(MSBuildProjectDirectory)\..\..\tools\voice-worker\REBUILD.md;$(MSBuildProjectDirectory)\..\..\tools\voice-worker\NAudio-LICENSE.txt;$(MSBuildProjectDirectory)\..\..\tools\voice-worker\models.json" />
+      <None Include="@(_VoiceRuntimeFiles)" Link="voice\runtime\%(_VoiceRuntimeFiles.RecursiveDir)%(_VoiceRuntimeFiles.Filename)%(_VoiceRuntimeFiles.Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+      <None Include="@(_VoiceSourceFiles)" Link="voice\%(_VoiceSourceFiles.Filename)%(_VoiceSourceFiles.Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
 </Project>

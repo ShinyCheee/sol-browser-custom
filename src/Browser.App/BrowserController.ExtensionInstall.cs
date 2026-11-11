@@ -18,6 +18,9 @@ public sealed partial class BrowserController
             var state = await SharedExtensions.SnapshotAsync();
             if (!state.TryGetValue(id, out var enabled) || enabled is null) return;
             ExtensionPopup?.Hide();
+            try { ExtensionCatalog.RefreshFromSource(ExtensionFolder(id)); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
+            { DebugLog.Write($"extension {id} : rafraîchissement depuis la source impossible : {e.Message}"); }
             await _pages.SyncExtensionsAsync(reloadId: id);
             await RefreshExtensionsAsync();
         }
@@ -32,7 +35,8 @@ public sealed partial class BrowserController
     {
         if (PrivateActive || EngineProfile is not { } profile) return false;
         await _extensionChanges.WaitAsync();
-        string? backup = null, destination = null;
+        string? backup = null, destination = null, trial = null;
+        var originalSource = knownId is null ? source : null;
         var wasEnabled = true;
         try
         {
@@ -40,7 +44,7 @@ public sealed partial class BrowserController
             if (id is null)
             {
                 // Dossier désigné à la main : l'identifiant n'est connu qu'une fois l'extension chargée.
-                var trial = ExtensionCatalog.CopyTo(source, Path.Combine(ExtensionsDir, "ajout"));
+                trial = ExtensionCatalog.CopyTo(source, Path.Combine(ExtensionsDir, "ajout"));
                 ExtensionCatalog.EnsureKey(trial); // l’identité ne dépend plus du déplacement du dossier
                 var loaded = await profile.AddBrowserExtensionAsync(trial);
                 id = loaded.Id;
@@ -56,6 +60,7 @@ public sealed partial class BrowserController
                 ExtensionCatalog.CopyTo(folder, backup);
             }
             if (!string.Equals(Path.GetFullPath(source), Path.GetFullPath(folder), StringComparison.OrdinalIgnoreCase)) ExtensionCatalog.CopyTo(source, folder);
+            if (originalSource is not null) ExtensionCatalog.SaveSource(folder, originalSource);
             ExtensionShim.Apply(folder); // la vision des onglets d'un navigateur à une fenêtre, avant le code de l'extension
             var installed = await profile.AddBrowserExtensionAsync(folder);
             if (installed.Id != id)
@@ -88,6 +93,8 @@ public sealed partial class BrowserController
         }
         finally
         {
+            try { if (trial is not null && Directory.Exists(trial)) Directory.Delete(trial, true); }
+            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException) { }
             try { if (backup is not null && Directory.Exists(backup)) Directory.Delete(backup, true); }
             catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException) { DebugLog.Write("extension ancienne copie : " + cleanup.Message); }
             _extensionChanges.Release();

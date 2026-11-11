@@ -4,14 +4,14 @@ using System.Text.Json;
 namespace Browser.Core;
 
 public sealed partial class VideoDownload(string url, string referer, string title, string directory, string toolsRoot,
-    IReadOnlyList<VideoCookie> cookies, int height = 0, bool direct = false, string? audioUrl = null, bool adaptQuality = false)
+    IReadOnlyList<VideoCookie> cookies, int height = 0, bool direct = false, string? audioUrl = null, bool adaptQuality = false, string? output = null)
 {
     public event Action? Changed;
     public string State { get; private set; } = "InProgress";
     public string Phase { get; private set; } = "engine.downloader";
     public long BytesReceived { get; private set; }
     public long TotalBytesToReceive { get; private set; }
-    public string ResultFilePath { get; private set; } = Path.Combine(directory, VideoSources.FileStem(title) + ".mp4");
+    public string ResultFilePath { get; private set; } = Path.Combine(directory, VideoSources.FileStem(title) + (VideoAudioFormat.IsAudio(output) ? "." + output : ".mp4"));
     public bool Paused { get; private set; }
     public bool Canceled { get; private set; }
     public bool CanResume => State == "Interrupted" && !Canceled;
@@ -49,6 +49,9 @@ public sealed partial class VideoDownload(string url, string referer, string tit
         var entered = false;
         try
         {
+            if (!VideoAudioFormat.IsValid(output)) throw new ArgumentException("Unsupported output");
+            if (VideoAudioFormat.IsAudio(output) && !VideoEngine.AudioSupported)
+            { Phase = "audioUnsupported"; State = "Interrupted"; return; }
             Phase = "queued"; Changed?.Invoke();
             await Slots.WaitAsync(ct); entered = true;
             Phase = "engine.downloader"; Changed?.Invoke();
@@ -61,7 +64,8 @@ public sealed partial class VideoDownload(string url, string referer, string tit
             var tools = await VideoEngine.PrepareAsync(toolsRoot, p => { Phase = p; Changed?.Invoke(); }, ct);
             ct.ThrowIfCancellationRequested();
             Directory.CreateDirectory(directory);
-            var prefix = VideoSources.FileStem(title) + " [" + _key + "]";
+            var prefix = VideoSources.FileStem(title) + " [" + _key + "]" + (VideoAudioFormat.IsAudio(output) ? ".source" : "");
+            if (VideoAudioFormat.IsAudio(output) && tools.Ffmpeg is null) throw new IOException("Missing audio encoder");
             var start = new ProcessStartInfo(tools.Downloader)
             { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
                 StandardOutputEncoding = System.Text.Encoding.UTF8, StandardErrorEncoding = System.Text.Encoding.UTF8, WorkingDirectory = directory };
@@ -69,9 +73,9 @@ public sealed partial class VideoDownload(string url, string referer, string tit
             foreach (var a in new[] { "--ignore-config", "--no-plugin-dirs", "--no-playlist", "--no-color", "--encoding", "utf-8", "--newline", "--windows-filenames",
                 "--no-overwrites", "--continue", "--socket-timeout", "30", "--retries", "3", "--fragment-retries", "3",
                 "--progress", "--progress-template", "download:SOL_PROGRESS:%(progress)j", "--print", "after_move:SOL_FILE:%(filepath)j",
-                "--no-simulate", "--output", prefix + ".%(ext)s", "--format", VideoQualitySelection.Selector(adaptQuality ? 0 : height, tools.Ffmpeg is not null),
+                "--no-simulate", "--output", prefix + ".%(ext)s", "--format", VideoAudioFormat.IsAudio(output) ? VideoAudioFormat.Selector : VideoQualitySelection.Selector(adaptQuality ? 0 : height, tools.Ffmpeg is not null),
                 "--referer", referer }) args.Add(a);
-            if (adaptQuality && height > 0) { args.Add("--format-sort"); args.Add($"height:{height}"); }
+            if (!VideoAudioFormat.IsAudio(output) && adaptQuality && height > 0) { args.Add("--format-sort"); args.Add($"height:{height}"); }
             // Never turn an entry into an implicit playlist or record a live stream.
             args.Add("--match-filters"); args.Add("!is_live & !is_upcoming & !has_drm");
             if (tools.Ffmpeg is not null) { args.Add("--ffmpeg-location"); args.Add(Path.GetDirectoryName(tools.Ffmpeg)!); }
@@ -94,8 +98,13 @@ public sealed partial class VideoDownload(string url, string referer, string tit
             ct.ThrowIfCancellationRequested();
             if (process.ExitCode != 0) { Phase = failure; State = "Interrupted"; }
             else if (!File.Exists(ResultFilePath) || !Path.GetFileName(ResultFilePath).Contains(_key)) throw new IOException("Missing output");
-            else { State = "Completed"; Phase = "done"; BytesReceived = new FileInfo(ResultFilePath).Length; TotalBytesToReceive = BytesReceived; }
+            else
+            {
+                if (VideoAudioFormat.IsAudio(output)) await EncodeAudioAsync(tools.Ffmpeg!, ResultFilePath, ct);
+                State = "Completed"; Phase = "done"; BytesReceived = new FileInfo(ResultFilePath).Length; TotalBytesToReceive = BytesReceived;
+            }
         }
+        catch (MissingAudioException) { State = "Interrupted"; Phase = "audioMissing"; }
         catch (OperationCanceledException) { State = "Interrupted"; Phase = Canceled ? "canceled" : "paused"; }
         catch (Exception e) when (e is IOException or InvalidDataException or System.Net.Http.HttpRequestException or JsonException or InvalidOperationException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or ArgumentException)
         { State = "Interrupted"; Phase = "failed"; }
@@ -123,7 +132,7 @@ public sealed partial class VideoDownload(string url, string referer, string tit
         {
             var path = JsonSerializer.Deserialize<string>(line[9..]);
             if (path is not null && Path.GetFullPath(path).StartsWith(Path.GetFullPath(directory) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-                && Path.GetFileName(path).Contains(_key) && VideoSources.Kind("https://output.invalid/" + Uri.EscapeDataString(Path.GetFileName(path))) is not null)
+                && Path.GetFileName(path).Contains(_key) && (VideoAudioFormat.IsAudio(output) ? VideoAudioFormat.IsMediaOutput(path) : VideoSources.Kind("https://output.invalid/" + Uri.EscapeDataString(Path.GetFileName(path))) is not null))
                 ResultFilePath = path;
         }
         if (!line.StartsWith("SOL_PROGRESS:")) return;
@@ -147,6 +156,9 @@ public sealed partial class VideoDownload(string url, string referer, string tit
         while (await reader.ReadLineAsync(ct) is { } line)
         {
             if (line.StartsWith("SOL_PROGRESS:")) ReadProgress(line);
+            else if (VideoAudioFormat.IsAudio(output) && (line.Contains("matches no streams", StringComparison.OrdinalIgnoreCase)
+                || line.Contains("does not contain any stream", StringComparison.OrdinalIgnoreCase)
+                || line.Contains("no audio", StringComparison.OrdinalIgnoreCase))) failure = "audioMissing";
             else if (line.Contains("DRM", StringComparison.OrdinalIgnoreCase)) failure = "protected";
             else if (line.Contains("403") || line.Contains("401") || line.Contains("sign in", StringComparison.OrdinalIgnoreCase)) failure = "auth";
         }

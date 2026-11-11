@@ -28,6 +28,10 @@ export function fakeServices() {
     if (sql.startsWith('INSERT INTO backups')) {
       assert(!backups.has(id)); backups.set(id, {id, user_id: userId, device: p[2], bytes: p[3], created_at: Date.now()}); return result([]);
     }
+    if (sql.startsWith('DELETE FROM backups WHERE user_id = $1 AND device = $2')) {
+      const replaced = [...backups.values()].filter(r => r.user_id === id && r.device === userId && r.id !== bytes);
+      for (const r of replaced) backups.delete(r.id); return result(replaced);
+    }
     if (sql.startsWith('DELETE FROM backups') && sql.includes('NOT IN')) {
       const stale = [...backups.values()].filter(r => r.user_id === id).reverse().slice(5);
       for (const r of stale) backups.delete(r.id); return result(stale);

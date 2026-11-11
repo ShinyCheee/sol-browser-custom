@@ -29,10 +29,15 @@ public sealed partial class PageHost
 
     private void Rest(string id, WebView2 view, bool hidden)
     {
-        if (view.CoreWebView2 is not { } core) return;
+        if (hidden) _hiddenSince.TryAdd(id, DateTime.UtcNow);
+        if (view.CoreWebView2 is not { } core)
+        {
+            if (!hidden) { _hiddenSince.Remove(id); _discardProtected.Remove(id); }
+            return;
+        }
         try
         {
-            if (hidden && _hiddenSince.TryAdd(id, DateTime.UtcNow) && settings.MemorySaver)
+            if (hidden && settings.MemorySaver)
                 core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low;
             else if (!hidden)
             {
@@ -57,7 +62,8 @@ public sealed partial class PageHost
         if (!settings.MemorySaver) return;
         foreach (var (id, since) in _hiddenSince.ToList())
         {
-            if (!_views.TryGetValue(id, out var view) || view.CoreWebView2 is not { } core) { _hiddenSince.Remove(id); continue; }
+            if (!_views.TryGetValue(id, out var view)) { _hiddenSince.Remove(id); continue; }
+            if (view.CoreWebView2 is not { } core) continue;
             try
             {
                 if (core.IsDocumentPlayingAudio) { _hiddenSince[id] = now; continue; } // musique, appel : il reste éveillé

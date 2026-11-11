@@ -68,7 +68,7 @@ public sealed partial class BrowserController
         _videoQualities = ("catalog", heights);
         var json = JsonSerializer.Serialize(new
         {
-            popup = "videos", id, title = _tabs.Tabs.FirstOrDefault(t => t.Id == id)?.Title ?? "Vidéo",
+            popup = "videos", id, audioAvailable = VideoEngine.AudioSupported, title = _tabs.Tabs.FirstOrDefault(t => t.Id == id)?.Title ?? "Vidéo",
             protectedMedia = _pages.VideoProtected(id), phase = "ready", sourceId = "catalog", qualities = heights,
             preferred = _settings.VideoQuality, selected = VideoQualitySelection.Pick(heights, _settings.VideoQuality), items = Array.Empty<object>(),
         });

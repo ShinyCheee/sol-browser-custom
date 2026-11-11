@@ -1,0 +1,32 @@
+[
+  {
+    "sha256": "007a59761e9258779f189df396b50d12b83bb5b79e66df4b955c230d2f2a0a59",
+    "bytes": 740363168,
+    "url": "https://huggingface.co/handy-computer/parakeet-ultra-gguf/resolve/39eeb55181f0d354fd934f06e92fd8d5037fed8e/parakeet-ultra-Q8_0.gguf",
+    "name": "parakeet-ultra-Q8_0.gguf"
+  },
+  {
+    "sha256": "641d1ab097da2b81128c076810edb052b385decc8be3381814802a64a73baf99",
+    "bytes": 63201294,
+    "url": "https://huggingface.co/rhasspy/piper-voices/resolve/e7229f7d33a10e145e109b886d661984201ac3c4/fr/fr_FR/siwis/medium/fr_FR-siwis-medium.onnx",
+    "name": "fr_FR-siwis-medium.onnx"
+  },
+  {
+    "sha256": "39479916c2db192b5ac9764daddd0c744d83e023ad890c6976c0633ae4df8959",
+    "bytes": 4875,
+    "url": "https://huggingface.co/rhasspy/piper-voices/resolve/e7229f7d33a10e145e109b886d661984201ac3c4/fr/fr_FR/siwis/medium/fr_FR-siwis-medium.onnx.json",
+    "name": "fr_FR-siwis-medium.onnx.json"
+  },
+  {
+    "sha256": "5efe09e69902187827af646e1a6e9d269dee769f9877d17b16b1b46eeaaf019f",
+    "bytes": 63201294,
+    "url": "https://huggingface.co/rhasspy/piper-voices/resolve/e7229f7d33a10e145e109b886d661984201ac3c4/en/en_US/lessac/medium/en_US-lessac-medium.onnx",
+    "name": "en_US-lessac-medium.onnx"
+  },
+  {
+    "sha256": "efe19c417bed055f2d69908248c6ba650fa135bc868b0e6abb3da181dab690a0",
+    "bytes": 4885,
+    "url": "https://huggingface.co/rhasspy/piper-voices/resolve/e7229f7d33a10e145e109b886d661984201ac3c4/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json",
+    "name": "en_US-lessac-medium.onnx.json"
+  }
+]

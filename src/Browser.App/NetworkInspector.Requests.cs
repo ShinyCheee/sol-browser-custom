@@ -96,15 +96,18 @@ public sealed partial class NetworkInspector
 /// Panneau du bas (outils de développement) : une vue d'interface dans sa propre rangée, sous les pages. Elle n'est
 /// créée qu'à la première ouverture : un navigateur qui ne s'en sert pas ne la paie pas.
 /// </summary>
-public sealed class PanelHost(Microsoft.UI.Xaml.Controls.RowDefinition row, UiBridge bridge, Func<Task> init, Browser.Core.Settings settings)
+public sealed class PanelHost(Microsoft.UI.Xaml.Controls.RowDefinition row, Microsoft.UI.Xaml.Controls.WebView2 view, UiBridge bridge, Func<Task> init, Browser.Core.Settings settings)
 {
     public const double MinHeight = 140, MaxHeight = 900;
     private bool _ready;
+    private readonly UiViewRest _rest = new(view, () => row.Height.Value > 0, "panel");
 
     public bool IsOpen => row.Height.Value > 0;
 
     public async Task ShowAsync()
     {
+        _rest.Wake();
+        view.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
         row.Height = new Microsoft.UI.Xaml.GridLength(Math.Clamp(settings.PanelHeight, MinHeight, MaxHeight));
         if (_ready) return;
         _ready = true;
@@ -119,9 +122,14 @@ public sealed class PanelHost(Microsoft.UI.Xaml.Controls.RowDefinition row, UiBr
         row.Height = new Microsoft.UI.Xaml.GridLength(settings.PanelHeight);
     }
 
-    public void Hide() => row.Height = new Microsoft.UI.Xaml.GridLength(0);
+    public void Hide()
+    {
+        row.Height = new Microsoft.UI.Xaml.GridLength(0);
+        view.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+        if (_ready) _rest.Rest();
+    }
 
-    public void Post(string json) => bridge.Post(json);
+    public void Post(string json) { if (IsOpen) _rest.Wake(); bridge.Post(json); }
 }
 
 /// <summary>
@@ -131,18 +139,24 @@ public sealed class PanelHost(Microsoft.UI.Xaml.Controls.RowDefinition row, UiBr
 public sealed class WelcomeHost(Microsoft.UI.Xaml.Controls.WebView2 view, UiBridge bridge, Func<Task> init)
 {
     private bool _ready;
+    private readonly UiViewRest _rest = new(view, () => view.Visibility == Microsoft.UI.Xaml.Visibility.Visible, "welcome");
 
     public bool IsOpen => view.Visibility == Microsoft.UI.Xaml.Visibility.Visible;
 
     public async Task ShowAsync()
     {
+        _rest.Wake();
         view.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
         if (_ready) { bridge.Post("""{"welcome":"reset"}"""); return; }
         _ready = true;
         await init();
     }
 
-    public void Hide() => view.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+    public void Hide()
+    {
+        view.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+        if (_ready) _rest.Rest();
+    }
 
     public void Post(string json) => bridge.Post(json);
 }

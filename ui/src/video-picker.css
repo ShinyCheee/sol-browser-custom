@@ -43,6 +43,8 @@
 .video-picker [role="checkbox"] { width: 20px; height: 20px; padding: 0; border: 2px solid var(--border-strong); border-radius: 6px; flex-shrink: 0; background: transparent; color: var(--text); }
 .video-picker [role="checkbox"][aria-checked="true"], .video-picker [role="checkbox"][aria-checked="mixed"] { background: var(--accent); border-color: var(--accent); color: white; }
 .video-picker [role="checkbox"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.video-output-modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.video-output-modes > button { width: 100%; }
 .video-batch-quality { font-size: 13px; font-weight: 600; margin: 0; }
 @media (max-width: 360px) {
   .video-picker { padding: 14px; gap: 12px; }

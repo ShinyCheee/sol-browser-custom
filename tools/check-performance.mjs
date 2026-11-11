@@ -12,11 +12,12 @@ const sample=()=>JSON.parse(execFileSync('pwsh',['-NoProfile','-Command',`
   $tree=@(Get-CimInstance Win32_Process); $ids=[System.Collections.Generic.HashSet[int]]::new(); [void]$ids.Add(${host.pid});
   do {$added=$false; foreach($p in $tree){if($ids.Contains([int]$p.ParentProcessId)-and $ids.Add([int]$p.ProcessId)){$added=$true}}}while($added);
   $rows=@(Get-Process -Id @($ids) -ErrorAction SilentlyContinue); $sum=$rows|Measure-Object PrivateMemorySize64,WorkingSet64,CPU -Sum;
-  @{privateBytes=$sum[0].Sum;workingSetBytes=$sum[1].Sum;cpuSeconds=$sum[2].Sum;processes=$rows.Count}|ConvertTo-Json -Compress
+  $privateWorking=(Get-CimInstance Win32_PerfFormattedData_PerfProc_Process | Where-Object {$ids.Contains([int]$_.IDProcess)} | Measure-Object WorkingSetPrivate -Sum).Sum;
+  @{privateBytes=$sum[0].Sum;workingSetBytes=$sum[1].Sum;privateWorkingSetBytes=$privateWorking;cpuSeconds=$sum[2].Sum;processes=$rows.Count}|ConvertTo-Json -Compress
 `],{encoding:'utf8'}));
 let ui;
 try{
-  ui=await host.launch(760);
+  ui=await host.launch(760,1000,60000);
   const readyMs=Math.round(performance.now()-started);
   const page=await host.connect(host.origin+'/2');
   await host.wait(()=>page.evaluate('document.readyState==="complete"').catch(()=>false),'page loaded');
@@ -29,6 +30,7 @@ try{
     cpuSeconds:Math.round((after.cpuSeconds-before.cpuSeconds)*100)/100};
   await writeFile(resolve(host.base,'performance.json'),JSON.stringify(report,null,2));console.log(JSON.stringify({base:host.base,...report},null,2));
   if(!baseline){
+    assert(!targets.some(u=>u.endsWith('#popup')),'popup renderer is not loaded before first use');
     assert(!targets.some(u=>u.endsWith('#capture')),'capture renderer is not loaded before first use');
     assert(themeMessages<=1,'unchanged page does not broadcast its theme every second');
     await page.evaluate(`document.body.style.background='#132440'`);

@@ -4,7 +4,7 @@ namespace Browser.Core;
 
 public sealed record Command(string Type, string? Id = null, string? Url = null, string? Title = null,
     string? Input = null, string? Query = null, int? Index = null, double? Ratio = null,
-    double? X = null, double? Y = null, double? Width = null, double? Height = null);
+    double? X = null, double? Y = null, double? Width = null, double? Height = null, string? Output = null);
 
 public static class CommandParser
 {
@@ -18,7 +18,7 @@ public static class CommandParser
         ["tab.open"] = [], ["tab.close"] = ["id"], ["tab.activate"] = ["id"],
         ["session.menu"] = ["id", "x", "y"], ["session.set"] = ["id", "query"],
         ["session.new"] = [], ["session.create"] = ["title"], ["session.rename"] = ["id", "title"],
-        ["session.delete"] = ["id"], ["site.reset"] = [],
+        ["session.delete"] = ["id"], ["session.detach"] = ["id"], ["site.reset"] = [],
         ["tab.move"] = ["id", "index"], ["tab.pin"] = ["id", "index"], ["tab.reopen"] = [],
         ["sidebar.menu"] = ["x", "y"], ["sidebar.motion.done"] = ["index"],
         ["nav.go"] = ["id", "input"], ["nav.back"] = ["id"], ["nav.forward"] = ["id"],
@@ -45,6 +45,8 @@ public static class CommandParser
         ["chat.toggle"] = [], ["tabs.ai"] = [], ["tabs.ai.apply"] = [], ["tabs.ai.dismiss"] = [], ["group.ai"] = ["id"], ["chat.ready"] = [], ["chat.send"] = ["input"], ["chat.copy"] = ["id"], ["chat.note"] = ["id"], ["chat.ask"] = ["input"], ["chat.cancel"] = [], ["chat.clear"] = [],
         ["chat.attach"] = [], ["chat.capture"] = [], ["chat.detach"] = ["id"], ["chat.file"] = ["id", "input"], ["download.retry"] = ["id"], ["download.forget"] = ["id"],
         ["voice.open"] = [], ["voice.listen"] = [], ["voice.stop"] = [], ["voice.close"] = [], ["voice.settings"] = [],
+        ["voice.install"] = [], ["voice.cancelInstall"] = [], ["voice.finish"] = [], ["voice.interrupt"] = [], ["voice.options"] = ["id", "index"],
+        ["voice.toggle"] = [], ["voice.configure"] = [],
         ["notes.open"] = [], ["notes.draft"] = ["id", "title", "input"],
         ["notes.save"] = [], ["notes.delete"] = ["id"], ["notes.edit"] = ["id"], ["notes.export"] = [],
         ["notes.select"] = ["id"],
@@ -82,7 +84,7 @@ public static class CommandParser
         ["welcome.ready"] = [], ["welcome.open"] = [], ["welcome.done"] = [], ["welcome.name"] = ["title"],
         ["import.run"] = ["id", "query"], ["import.csv"] = [], ["update.restart"] = [], ["update.later"] = [], ["update.check"] = [],
         ["extensions.open"] = [], ["extensions.menu"] = ["x", "y"], ["extension.add"] = ["id"], ["extension.folder"] = [], ["extension.toggle"] = ["id"], ["extension.remove"] = ["id"], ["extension.show"] = ["id"],
-        ["extension.store"] = [], ["extension.install"] = ["title"], ["extension.options"] = ["id"], ["extension.reload"] = ["id"],
+        ["extension.store"] = [], ["extension.addons"] = [], ["extension.devmode"] = [], ["extension.inspect"] = ["id"], ["extension.install"] = ["title"], ["extension.options"] = ["id"], ["extension.reload"] = ["id"],
         ["extension.confirm"] = ["id"], ["extension.current"] = [],
         ["extension.pin"] = ["id"], ["extensions.update"] = [], ["extension.update"] = ["id"],
         ["capture.size"] = ["height"], ["capture.close"] = [], ["capture.visibility"] = ["index"],
@@ -104,7 +106,9 @@ public static class CommandParser
 
             var cmd = new Command(type, Str(root, "id"), Str(root, "url"), Str(root, "title"),
                 Str(root, "input"), Str(root, "query"), Int(root, "index"), Num(root, "ratio"),
-                Num(root, "x"), Num(root, "y"), Num(root, "width"), Num(root, "height"));
+                Num(root, "x"), Num(root, "y"), Num(root, "width"), Num(root, "height"), Str(root, "output"));
+            if (type is "video.download" or "video.batch" && (root.TryGetProperty("output", out var output)
+                && output.ValueKind != JsonValueKind.String || !VideoAudioFormat.IsValid(cmd.Output))) return null;
             if (type == "zoom.set" && (cmd.Index is not (>= 50 and <= 200) || cmd.Index % 5 != 0)) return null;
             return required.All(field => Has(cmd, field)) ? cmd : null;
         }
