@@ -85,7 +85,8 @@ function probe(path) {
   assert.equal(p.status,0,p.stderr);return JSON.parse(p.stdout).streams;
 }
 try {
-  ui=await host.launch();popup=await host.connect('#popup');
+  // Le menu ne se charge qu'à sa première utilisation : l'ouvrir une fois pour pouvoir écouter ses messages.
+  ui=await host.launch();await cmd({type:'settings.open',x:900,y:60});popup=await host.connect('#popup');await cmd({type:'popup.close'});
   await popup.evaluate(`chrome.webview.addEventListener('message',e=>{if(e.data.popup==='videos')window.__video=e.data})`);
   await cmd({type:'settings.set',id:'videoQuality',index:1440});
   await navigate('/hls');await host.wait(async()=>(await active()).videos>0,'HLS detection');

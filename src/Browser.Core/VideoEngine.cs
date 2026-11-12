@@ -24,7 +24,7 @@ public static class VideoEngine
         var runtime = arch == Architecture.X86 ? null : await AcquireAsync(root, "denoland/deno",
             "deno-x86_64-pc-windows-msvc.zip", true, "deno", "deno.exe", phase, ct);
         // FFmpeg win64 fonctionne aussi sous Windows ARM64 par émulation ; pas sous Windows 32 bits.
-        var ffmpeg = arch == Architecture.X86 || inspectOnly ? null : await AcquireAsync(root, "BtbN/FFmpeg-Builds",
+        var ffmpeg = arch == Architecture.X86 || inspectOnly ? null : await AcquireAsync(root, "FFmpeg-Builds/FFmpeg-Builds",
             "ffmpeg-master-latest-win64-lgpl-shared.zip", true, "ffmpeg", "ffmpeg.exe", phase, ct);
         return new(downloader, ffmpeg, runtime);
     }
@@ -33,7 +33,7 @@ public static class VideoEngine
     {
         Directory.CreateDirectory(root);
         if (RuntimeInformation.OSArchitecture == Architecture.X86) throw new IOException("Audio encoding requires 64-bit Windows");
-        return AcquireAsync(root, "BtbN/FFmpeg-Builds", "ffmpeg-master-latest-win64-lgpl-shared.zip", true, "ffmpeg", "ffmpeg.exe", phase, ct);
+        return AcquireAsync(root, "FFmpeg-Builds/FFmpeg-Builds", "ffmpeg-master-latest-win64-lgpl-shared.zip", true, "ffmpeg", "ffmpeg.exe", phase, ct);
     }
 
     private static async Task<string> AcquireAsync(string root, string repo, string assetName, bool zip, string tool, string executableName, Action<string> phase, CancellationToken ct)

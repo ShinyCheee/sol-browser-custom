@@ -94,7 +94,7 @@ public sealed partial class BrowserController
         finally { _startingVideo = false; }
     }
 
-    private void AddVideoDownload(string id, VideoDownload job)
+    private void AddVideoDownload(string id, IBackgroundDownload job)
     {
         _videoJobs.Add(job);
         var downloadId = "v" + Guid.NewGuid().ToString("N");

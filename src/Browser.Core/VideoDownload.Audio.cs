@@ -21,7 +21,7 @@ public sealed partial class VideoDownload
         }
         var encoder = await VideoEngine.PrepareAudioAsync(toolsRoot, phase => { Phase = phase; Changed?.Invoke(); }, ct);
         await EncodeAudioAsync(encoder, source, ct);
-        File.Delete(source + ".etag"); File.Delete(source + ".complete");
+        File.Delete(source + ".complete");
         BytesReceived = TotalBytesToReceive = new FileInfo(ResultFilePath).Length;
         State = "Completed"; Phase = "done";
     }

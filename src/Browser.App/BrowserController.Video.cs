@@ -7,7 +7,7 @@ namespace Browser.App;
 public sealed partial class BrowserController
 {
     private (string Id, string Url)? _videoPicker;
-    private readonly List<VideoDownload> _videoJobs = [];
+    private readonly List<IBackgroundDownload> _videoJobs = [];
     private bool _startingVideo;
     private CancellationTokenSource? _videoProbeCancel;
     private (string SourceId, int[] Heights)? _videoQualities;

@@ -62,55 +62,21 @@ public sealed partial class VideoDownload
                 if (process.ExitCode != 0) throw new IOException("Mux failed");
                 File.Delete(video); File.Delete(audio);
             }
-            foreach (var path in new[] { video, audio }) File.Delete(path + ".etag");
             BytesReceived = TotalBytesToReceive = new FileInfo(ResultFilePath).Length;
             State = "Completed"; Phase = "done";
         }
         finally { linked.Cancel(); if (mux is not null) { try { await mux; } catch { /* L'erreur du transfert reste prioritaire. */ } } }
     }
 
+    // Plusieurs connexions par piste, comme IDM : les serveurs vidéo limitent souvent le débit de chacune.
     private async Task<string> TransferAsync(string source, string path, Action<long, long> progress, CancellationToken ct)
     {
-        var jar = new CookieContainer();
-        foreach (var cookie in cookies)
-        {
-            try { jar.Add(new Cookie(cookie.Name, cookie.Value, cookie.Path, cookie.Domain) { Secure = cookie.Secure }); }
-            catch (CookieException) { }
-        }
-        using var handler = new HttpClientHandler { CookieContainer = jar };
-        using var http = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
-        using var request = new HttpRequestMessage(HttpMethod.Get, source);
-        request.Headers.Referrer = new Uri(referer);
-        var offset = File.Exists(path) && File.Exists(path + ".etag") ? new FileInfo(path).Length : 0;
-        if (offset > 0)
-        {
-            request.Headers.Range = new RangeHeaderValue(offset, null);
-            request.Headers.TryAddWithoutValidation("If-Range", await File.ReadAllTextAsync(path + ".etag", ct));
-        }
-        using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
-        response.EnsureSuccessStatusCode();
-        if (response.StatusCode == HttpStatusCode.PartialContent)
-        {
-            if (response.Content.Headers.ContentRange?.From != offset) throw new IOException("Invalid range");
-        }
-        else offset = 0;
-        var mime = response.Content.Headers.ContentType?.MediaType ?? "";
-        if (mime.Contains("html") || mime.Contains("json") || mime.Contains("xml")) throw new IOException("Not media");
-        if (response.Headers.ETag is { IsWeak: false } etag) await File.WriteAllTextAsync(path + ".etag", etag.ToString(), ct);
-        else File.Delete(path + ".etag");
-        var total = response.Content.Headers.ContentRange?.Length ?? (response.Content.Headers.ContentLength is { } length ? offset + length : 0);
-        await using var input = await response.Content.ReadAsStreamAsync(ct);
-        await using var output = new FileStream(path, offset > 0 ? FileMode.Append : FileMode.Create, FileAccess.Write, FileShare.Read, 65536, true);
-        var buffer = new byte[65536]; var received = offset; var last = Stopwatch.StartNew();
-        progress(received, total);
-        while (await input.ReadAsync(buffer, ct) is var read && read > 0)
-        {
-            await output.WriteAsync(buffer.AsMemory(0, read), ct); received += read;
-            if (last.ElapsedMilliseconds >= 100 || received == total) { progress(received, total); last.Restart(); }
-        }
-        if (total > 0 && received != total) throw new IOException("Truncated media");
-        if (received == 0) throw new IOException("Empty media");
-        progress(received, total);
+        using var http = SegmentedTransfer.Client(VideoCookie.Container(cookies));
+        HttpRequestMessage Request() { var r = new HttpRequestMessage(HttpMethod.Get, source); r.Headers.Referrer = new Uri(referer); return r; }
+        var result = await SegmentedTransfer.RunAsync(http, Request, path, progress, ct,
+            accept: mime => !(mime.Contains("html") || mime.Contains("json") || mime.Contains("xml")));
+        if (result.Bytes == 0) throw new IOException("Empty media");
+        var mime = result.MediaType;
         return mime.Contains("webm") ? ".webm" : mime.Contains("quicktime") ? ".mov" : mime.Contains("matroska") ? ".mkv"
             : mime.Contains("ogg") ? ".ogv" : ".mp4";
     }

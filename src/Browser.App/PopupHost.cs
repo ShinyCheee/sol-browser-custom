@@ -53,7 +53,7 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge, Func<T
         if (frame.Visibility != Visibility.Visible)
         {
             frame.Opacity = 0; frame.IsHitTestVisible = false;
-            if (!(frame.Height > 0)) frame.Height = 100;
+            frame.Height = Math.Max(frame.Height, 100);
             frame.Visibility = Visibility.Visible;
         }
         if (_ready) Ready();

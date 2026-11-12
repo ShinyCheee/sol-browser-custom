@@ -43,8 +43,8 @@ public sealed class DockHost(Grid frame, WebView2 view, UiBridge bridge, Func<Ta
     private void Warm()
     {
         frame.Opacity = 0; frame.IsHitTestVisible = false;
-        if (!(frame.Width > 0)) frame.Width = 44;
-        if (!(frame.Height > 0)) frame.Height = 44;
+        // Au repos le cadre fait 1 px : le moteur traite une vue aussi petite comme masquée.
+        frame.Width = Math.Max(frame.Width, 44); frame.Height = Math.Max(frame.Height, 44);
         frame.Visibility = Visibility.Visible;
     }
 

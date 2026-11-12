@@ -111,7 +111,7 @@ public sealed partial class BrowserController
         _pages.PopupClosed += id =>
         {
             // Le moteur referme la fenêtre devenue téléchargement : sa vue pilote encore le transfert.
-            if(_downloads.Any(d=>d.TabId==id&&DownloadPending(d.Id,d.Op))){DebugLog.Write($"popup.close.deferred {id}");return;}
+            if(_downloads.Any(d=>d.TabId==id&&d.Op.Native&&DownloadPending(d.Id,d.Op))){DebugLog.Write($"popup.close.deferred {id}");return;}
             Close(id);Refresh();
         };
         _pages.SessionFailed += id => Notice(T("Session indisponible", "Session unavailable"), T("Sol n’a pas pu ouvrir cette session. Réessayez en activant l’onglet ; aucune autre session n’a été utilisée.", "Sol could not open this session. Activate the tab to retry; no other session was used."));

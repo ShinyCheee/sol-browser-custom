@@ -16,7 +16,7 @@ public sealed partial class BrowserController
     private DownloadOperation? FindDownload(string id) =>
         _downloads.FirstOrDefault(d => d.Id == id).Op;
 
-    private void OnDownloadStarting(string tabId, Microsoft.Web.WebView2.Core.CoreWebView2DownloadStartingEventArgs e)
+    private async void OnDownloadStarting(string tabId, Microsoft.Web.WebView2.Core.CoreWebView2DownloadStartingEventArgs e)
     {
         using var deferral=e.GetDeferral();
         try
@@ -25,6 +25,7 @@ public sealed partial class BrowserController
             // Vérification dans un profil jetable : les fichiers de test restent avec ses données.
             if (Environment.GetEnvironmentVariable("NAVIGATEUR_TEST_DOWNLOAD_DIR") is { Length: > 0 } dir && Directory.Exists(dir))
                 e.ResultFilePath = Path.Combine(dir, Path.GetFileName(e.ResultFilePath));
+            if (await AccelerateAsync(tabId, e)) return;
             var native = e.DownloadOperation;
             var op = new DownloadOperation(native);
             _downloads.Insert(0, ($"d{++_downloadCounter}", op, tabId));

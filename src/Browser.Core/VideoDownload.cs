@@ -4,8 +4,9 @@ using System.Text.Json;
 namespace Browser.Core;
 
 public sealed partial class VideoDownload(string url, string referer, string title, string directory, string toolsRoot,
-    IReadOnlyList<VideoCookie> cookies, int height = 0, bool direct = false, string? audioUrl = null, bool adaptQuality = false, string? output = null)
+    IReadOnlyList<VideoCookie> cookies, int height = 0, bool direct = false, string? audioUrl = null, bool adaptQuality = false, string? output = null) : IBackgroundDownload
 {
+    public string? RetryUrl => null;
     public event Action? Changed;
     public string State { get; private set; } = "InProgress";
     public string Phase { get; private set; } = "engine.downloader";
@@ -71,7 +72,7 @@ public sealed partial class VideoDownload(string url, string referer, string tit
                 StandardOutputEncoding = System.Text.Encoding.UTF8, StandardErrorEncoding = System.Text.Encoding.UTF8, WorkingDirectory = directory };
             var args = start.ArgumentList;
             foreach (var a in new[] { "--ignore-config", "--no-plugin-dirs", "--no-playlist", "--no-color", "--encoding", "utf-8", "--newline", "--windows-filenames",
-                "--no-overwrites", "--continue", "--socket-timeout", "30", "--retries", "3", "--fragment-retries", "3",
+                "--no-overwrites", "--continue", "--concurrent-fragments", "8", "--socket-timeout", "30", "--retries", "3", "--fragment-retries", "3",
                 "--progress", "--progress-template", "download:SOL_PROGRESS:%(progress)j", "--print", "after_move:SOL_FILE:%(filepath)j",
                 "--no-simulate", "--output", prefix + ".%(ext)s", "--format", VideoAudioFormat.IsAudio(output) ? VideoAudioFormat.Selector : VideoQualitySelection.Selector(adaptQuality ? 0 : height, tools.Ffmpeg is not null),
                 "--referer", referer }) args.Add(a);
@@ -168,6 +169,17 @@ public sealed partial class VideoDownload(string url, string referer, string tit
 
 public sealed record VideoCookie(string Domain, string Path, bool Secure, long Expires, string Name, string Value)
 {
+    public static System.Net.CookieContainer Container(IEnumerable<VideoCookie> cookies)
+    {
+        var jar = new System.Net.CookieContainer();
+        foreach (var c in cookies)
+        {
+            try { jar.Add(new System.Net.Cookie(c.Name, c.Value, c.Path, c.Domain) { Secure = c.Secure }); }
+            catch (System.Net.CookieException) { }
+        }
+        return jar;
+    }
+
     public static string Jar(IEnumerable<VideoCookie> cookies) => "# Netscape HTTP Cookie File\n" + string.Join("\n", cookies
         .Where(c => !(c.Domain + c.Path + c.Name + c.Value).Any(ch => ch is '\r' or '\n' or '\t'))
         .Select(c => $"{c.Domain}\t{(c.Domain.StartsWith('.') ? "TRUE" : "FALSE")}\t{c.Path}\t{(c.Secure ? "TRUE" : "FALSE")}\t{c.Expires}\t{c.Name}\t{c.Value}")) + "\n";

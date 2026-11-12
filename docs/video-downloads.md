@@ -71,7 +71,7 @@ restent applicables, indépendamment du nom du site.
 Les outils sont préparés en arrière-plan dès la première détection, dans le dossier de données
 Sol `tools/video`, sans installation globale ni IDM. Seuls les actifs des
 distributions officielles [yt-dlp](https://github.com/yt-dlp/yt-dlp/releases)
-et [BtbN FFmpeg](https://github.com/BtbN/FFmpeg-Builds/releases), ainsi que le
+et [BtbN FFmpeg](https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases), ainsi que le
 runtime officiel [Deno](https://github.com/denoland/deno/releases), sont acceptés.
 Le SHA-256 annoncé par l’API GitHub est vérifié avant extraction/exécution.
 Un reçu local permet de revérifier les fichiers mis en cache.

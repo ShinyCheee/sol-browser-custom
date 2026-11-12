@@ -3,16 +3,18 @@ using Microsoft.Web.WebView2.Core;
 
 namespace Browser.App;
 
-// Même contrat pour les téléchargements WebView2 et les vidéos assemblées hors du moteur.
+// Même contrat pour les téléchargements WebView2 et ceux menés hors du moteur (vidéos, fichiers à plusieurs connexions).
 internal sealed record SavedDownload(string Path, string? Uri, long Received, long Total, bool Completed);
 
 internal sealed class DownloadOperation
 {
     private readonly CoreWebView2DownloadOperation? _native;
-    private readonly VideoDownload? _video;
+    private readonly IBackgroundDownload? _video;
     private readonly SavedDownload? _saved; // téléchargement d'une session précédente : un souvenir, plus rien à piloter
     public DownloadOperation(CoreWebView2DownloadOperation native) => _native = native;
-    public DownloadOperation(VideoDownload video) => _video = video;
+    /// <summary>Transfert mené par le moteur : il dépend de la vue de l'onglet qui l'a lancé.</summary>
+    public bool Native => _native is not null;
+    public DownloadOperation(IBackgroundDownload video) => _video = video;
     public DownloadOperation(SavedDownload saved) => _saved = saved;
     public SavedDownload Save() => new(ResultFilePath, Uri, BytesReceived, TotalBytesToReceive, State == CoreWebView2DownloadState.Completed);
     public string ResultFilePath => _saved?.Path ?? _native?.ResultFilePath ?? _video!.ResultFilePath;
@@ -21,7 +23,7 @@ internal sealed class DownloadOperation
     public CoreWebView2DownloadState State => _saved is { } saved ? (saved.Completed ? CoreWebView2DownloadState.Completed : CoreWebView2DownloadState.Interrupted) : _native?.State ?? Enum.Parse<CoreWebView2DownloadState>(_video!.State);
     public bool CanResume => _saved is null && (_native?.CanResume ?? _video!.CanResume);
     public string? Phase => _video?.Phase;
-    public string? Uri => _saved?.Uri ?? _native?.Uri;
+    public string? Uri => _saved?.Uri ?? _native?.Uri ?? _video?.RetryUrl;
     public CoreWebView2DownloadInterruptReason InterruptReason => _saved is not null ? (_saved.Completed ? CoreWebView2DownloadInterruptReason.None : CoreWebView2DownloadInterruptReason.NetworkFailed) : _native?.InterruptReason ?? (_video!.Paused
         ? CoreWebView2DownloadInterruptReason.UserPaused : _video.Canceled ? CoreWebView2DownloadInterruptReason.UserCanceled
         : State == CoreWebView2DownloadState.Interrupted ? CoreWebView2DownloadInterruptReason.NetworkFailed : CoreWebView2DownloadInterruptReason.None);

@@ -25,7 +25,22 @@ function status(d: Download) {
     const reasons:Record<string,string>={NetworkDisconnected:t('Connexion interrompue','Connection interrupted'),NetworkFailed:t('Erreur réseau','Network error'),NetworkTimeout:t('Délai réseau dépassé','Network timeout'),FileNoSpace:t('Espace disque insuffisant','Not enough disk space'),FileAccessDenied:t('Accès au fichier refusé','File access denied'),ServerForbidden:t('Accès refusé par le serveur','Server denied access'),ServerUnauthorized:t('Connexion au site nécessaire','Sign-in required'),UserShutdown:t('Onglet ou navigateur fermé','Tab or browser closed')};
     return reasons[d.reason??'']||t('Interrompu','Interrupted');
   }
-  return d.total ? `${percent(d)} % · ${size(d.total)}` : size(d.received);
+  const parts=[d.total ? `${percent(d)} % · ${size(d.total)}` : size(d.received)];
+  // Vitesse seulement : les connexions parallèles d'un téléchargement accéléré restent en coulisses.
+  const rate=speed(d);if(rate)parts.push(`${size(rate)}/s`);
+  return parts.join(' · ');
+}
+
+// Vitesse lissée de chaque téléchargement, à partir des mises à jour successives (quatre par seconde au plus).
+const samples=new Map<string,{at:number;bytes:number;rate:number}>();
+function speed(d: Download) {
+  const now=performance.now(),last=samples.get(d.id);
+  if(!last||d.received<last.bytes){samples.set(d.id,{at:now,bytes:d.received,rate:0});return 0;}
+  const elapsed=(now-last.at)/1000;
+  if(elapsed<0.2)return last.rate;
+  const instant=(d.received-last.bytes)/elapsed,rate=last.rate?last.rate*0.6+instant*0.4:instant;
+  samples.set(d.id,{at:now,bytes:d.received,rate});
+  return rate;
 }
 
 // Carte d'un téléchargement : partagée par le panneau de la barre et l'encart en bas à droite.
