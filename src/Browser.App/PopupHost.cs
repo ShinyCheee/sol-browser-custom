@@ -32,7 +32,7 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge, Func<T
     }
 
     /// <summary>Un menu est affiché ou en cours d'affichage.</summary>
-    public bool IsOpen => _pending || frame.Visibility == Visibility.Visible;
+    public bool IsOpen => _pending || frame.Visibility == Visibility.Visible && frame.Opacity > 0;
 
     /// <summary>Place la vue et lui envoie son contenu. Elle devient visible quand elle a annoncé sa hauteur.</summary>
     /// <param name="above">Le point donné est le bas de la vue : elle s'ouvre vers le haut, sans recouvrir le bouton d'où elle vient.</param>
@@ -48,6 +48,14 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge, Func<T
         _focus = focus;
         _content = contentJson;
         Rest.Wake();
+        // Le moteur gèle le code d'une vue masquée : tant que son contenu n'a pas donné sa taille, elle est présente mais
+        // transparente et inerte, sinon elle n'annonce ni qu'elle est prête ni sa taille, et le menu ne s'ouvre pas.
+        if (frame.Visibility != Visibility.Visible)
+        {
+            frame.Opacity = 0; frame.IsHitTestVisible = false;
+            if (!(frame.Height > 0)) frame.Height = 100;
+            frame.Visibility = Visibility.Visible;
+        }
         if (_ready) Ready();
         else if (!_started) { _started = true; _ = InitAsync(); }
     }
@@ -62,6 +70,7 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge, Func<T
     public void Ready()
     {
         _ready = true;
+        DebugLog.Write($"popup.ready pending={_pending} content={_content is not null}");
         if (!_pending || _content is null)
         {
             if (frame.Visibility != Visibility.Visible) Rest.Rest();
@@ -88,7 +97,13 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge, Func<T
         _center = top is null;
     }
 
-    public void Post(string json) => bridge.Post(json);
+    // Une vue en veille ne lit pas ses messages : elle est réveillée le temps de recevoir celui-ci.
+    public void Post(string json)
+    {
+        Rest.Wake();
+        bridge.Post(json);
+        if (_ready && !IsOpen) Rest.Rest();
+    }
 
     public void ShowBottom(double width, string json)
     {
@@ -98,7 +113,7 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge, Func<T
 
     public void SetVisible(bool visible)
     {
-        if (visible) Rest.Wake();
+        if (visible) { Rest.Wake(); frame.Opacity = 1; frame.IsHitTestVisible = true; }
         frame.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
         if (!visible) Rest.Rest();
     }
@@ -111,7 +126,7 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge, Func<T
         _bottom = false;
         Rest.Wake();
         frame.Width = window.ActualWidth; frame.Height = window.ActualHeight;
-        frame.Margin = new Thickness(0); frame.Visibility = Visibility.Visible;
+        frame.Margin = new Thickness(0); frame.Opacity = 1; frame.IsHitTestVisible = true; frame.Visibility = Visibility.Visible;
         CornerClip.Set(view, 0);
         view.Focus(FocusState.Programmatic);
     }
@@ -141,7 +156,7 @@ public sealed class PopupHost(Grid frame, WebView2 view, UiBridge bridge, Func<T
         if (_bottom) { x = (window.ActualWidth - frame.Width) / 2; y = window.ActualHeight - frame.Height - 18; }
         frame.Margin = new Thickness(x, y, 0, 0);
 
-        Rest.Wake(); frame.Visibility = Visibility.Visible;
+        Rest.Wake(); frame.Opacity = 1; frame.IsHitTestVisible = true; frame.Visibility = Visibility.Visible;
         frame.UpdateLayout();
         CornerClip.Set(view, Radius * (float)(UiBridge.Settings?.UiFactor ?? 0.92));
         if (_pending && _focus) view.Focus(FocusState.Programmatic);

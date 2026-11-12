@@ -101,7 +101,7 @@ export function EyeTracker({
       let lid = 1;
       if (now > nextBlink) {
         blink = now;
-        nextBlink = now + (idle ? 2000 : 2600 + Math.random() * 3200);
+        nextBlink = now + (idle ? 6000 + Math.random() * 4000 : 2600 + Math.random() * 3200);
       }
       const since = now - blink;
       if (since < 160) lid = 1 - 0.9 * Math.sin((since / 160) * Math.PI);
@@ -123,9 +123,20 @@ export function EyeTracker({
         state.y += state.vy * dt;
       }
       draw(now);
+      // Yeux au repos et paupières ouvertes : plus rien à dessiner. La boucle s'arrête jusqu'au prochain clignement ou
+      // mouvement, au lieu d'occuper le processeur et la carte graphique 60 fois par seconde.
+      const settled = Math.abs(state.tx - state.x) + Math.abs(state.ty - state.y) + Math.abs(state.vx) + Math.abs(state.vy) < 0.002;
+      if (settled && now - blink >= 160) {
+        raf = 0; prev = 0;
+        sleep = window.setTimeout(wake, Math.max(0, nextBlink - now));
+        return;
+      }
       raf = requestAnimationFrame(tick);
     };
-    raf = requestAnimationFrame(tick);
+    let sleep = 0;
+    const wake = () => { window.clearTimeout(sleep); if (!raf) raf = requestAnimationFrame(tick); };
+    const stop = () => { cancelAnimationFrame(raf); window.clearTimeout(sleep); };
+    wake();
 
     const frame = el.closest<HTMLElement>("[data-eyt-frame]") ?? el;
     const aim = (e: PointerEvent) => {
@@ -143,24 +154,29 @@ export function EyeTracker({
       const far = Math.min(0.85, Math.tanh(d / reach) * (clamp(knobs.current.follow, 0, 100) / 100) * 1.5);
       state.tx = (dx / d) * far;
       state.ty = (dy / d) * far;
+      wake();
     };
-    const rest = () => { state.tx = 0; state.ty = 0; };
+    const rest = () => { state.tx = 0; state.ty = 0; wake(); };
 
     if (idle) {
+      const GLANCE_MS = 20000;
       let glance = 0;
+      // Mascotte d'ambiance : un regard de temps en temps suffit, et aucun quand l'interface est masquée.
       const lookAround = () => {
+        if (document.hidden) { glance = window.setTimeout(lookAround, GLANCE_MS); return; }
         const a = Math.random() * Math.PI * 2;
         const far = 0.45 + Math.random() * 0.25;
         state.tx = Math.cos(a) * far;
         state.ty = Math.sin(a) * far;
+        wake();
         glance = window.setTimeout(() => {
           rest();
-          glance = window.setTimeout(lookAround, 5000 - 900);
+          glance = window.setTimeout(lookAround, GLANCE_MS - 900);
         }, 900);
       };
-      glance = window.setTimeout(lookAround, 5000);
+      glance = window.setTimeout(lookAround, GLANCE_MS);
       return () => {
-        cancelAnimationFrame(raf);
+        stop();
         window.clearTimeout(glance);
       };
     }
@@ -168,7 +184,7 @@ export function EyeTracker({
     window.addEventListener("pointermove", aim, { passive: true });
     document.documentElement.addEventListener("pointerleave", rest);
     return () => {
-      cancelAnimationFrame(raf);
+      stop();
       window.removeEventListener("pointermove", aim);
       document.documentElement.removeEventListener("pointerleave", rest);
     };

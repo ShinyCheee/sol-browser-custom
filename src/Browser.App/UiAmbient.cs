@@ -81,6 +81,12 @@ public sealed partial class UiBridge
         _ambientTimer.Start();
     }
 
+    /// <summary>Fenêtre en arrière-plan : le suivi des couleurs ralentit pour laisser la page et le processeur au repos.</summary>
+    public void SetAmbientPace(bool foreground)
+    {
+        if (_ambientTimer is not null) _ambientTimer.Interval = TimeSpan.FromSeconds(foreground ? 1 : 4);
+    }
+
     private async Task<(byte R, byte G, byte B)?> ReadAmbientAsync()
     {
         if (Settings?.LiveColor == false || pages is null || _activeId is null || pages.CoreOf(_activeId) is not { } core) return null;

@@ -19,7 +19,7 @@ export default function Capture() {
   const anchor=useRef<{x:number;y:number}|null>(null);
   useLang();
   const close=()=>{send({type:'capture.selection',index:0});send({type:'capture.close'});setPhase('idle');setPreview('');setArea(null);anchor.current=null;};
-  useEffect(()=>{
+  useLayoutEffect(()=>{
     const off=onMessage(data=>{
       const message=data as {event?:string;kind?:string;mode?:string;data?:string;device?:boolean};
       if(message.event==='capture-open'){

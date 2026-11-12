@@ -14,9 +14,11 @@ public sealed class DockHost(Grid frame, WebView2 view, UiBridge bridge, Func<Ta
     private string? _last;
     private bool _tracksBounds;
     private double _requestedWidth, _requestedHeight;
-    private readonly UiViewRest _rest = new(view, () => frame.Visibility == Visibility.Visible, "dock");
+    // Un contenu en attente d'affichage garde la vue éveillée : endormie, elle ne pourrait ni le dessiner ni donner sa taille.
+    private UiViewRest? _resting;
+    private UiViewRest _rest => _resting ??= new(view, () => frame.Visibility == Visibility.Visible || _last is not null, "dock");
 
-    public bool Visible => frame.Visibility == Visibility.Visible;
+    public bool Visible => frame.Visibility == Visibility.Visible && frame.Opacity > 0;
 
     /// <summary>Envoie le contenu ; l'encart apparaît quand il a annoncé sa taille.</summary>
     public void Post(string json)
@@ -28,10 +30,22 @@ public sealed class DockHost(Grid frame, WebView2 view, UiBridge bridge, Func<Ta
             bridge.Post(json);
             // Une nouvelle carte de même hauteur ne déclenche pas forcément le ResizeObserver.
             if (!Visible && _requestedWidth > 0 && _requestedHeight > 0) SetSize(_requestedWidth, _requestedHeight);
+            else if (frame.Visibility != Visibility.Visible) Warm();
             return;
         }
         _started = true;
+        Warm();
         _ = InitializeAsync(); // l'encart demandera son contenu une fois prêt (voir Ready)
+    }
+
+    // Le moteur gèle le code d'une vue jamais affichée : pendant son premier chargement, l'encart est présent mais
+    // transparent et inerte, sinon il n'annonce pas sa taille et n'apparaît pas.
+    private void Warm()
+    {
+        frame.Opacity = 0; frame.IsHitTestVisible = false;
+        if (!(frame.Width > 0)) frame.Width = 44;
+        if (!(frame.Height > 0)) frame.Height = 44;
+        frame.Visibility = Visibility.Visible;
     }
 
     private async Task InitializeAsync()
@@ -66,6 +80,7 @@ public sealed class DockHost(Grid frame, WebView2 view, UiBridge bridge, Func<Ta
         frame.Width = Math.Clamp(width, 44, maxWidth);
         frame.Height = Math.Clamp(height, 44, maxHeight);
         if (!Visible) DebugLog.Write("dock.shown");
+        frame.Opacity = 1; frame.IsHitTestVisible = true;
         frame.Visibility = Visibility.Visible;
         frame.UpdateLayout();
         CornerClip.Set(view, 16 * (float)(UiBridge.Settings?.UiFactor ?? 0.92)); // beUI Card rounded-2xl.

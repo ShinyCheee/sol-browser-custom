@@ -69,6 +69,14 @@ public static class BrowserShortcuts
         new(0x37,2,"tab.7","Onglet 7","Tab 7","7"),
         new(0x38,2,"tab.8","Onglet 8","Tab 8","8"),
         new(0x39,2,"tab.9","Dernier onglet","Last tab","9"),
+        // Réflexes venus de Chrome : mêmes actions, placées après les raccourcis principaux pour ne pas changer leurs libellés.
+        new(0x44,1,"address.focus","Barre d’adresse","Address bar","D"),
+        new(0x75,0,"address.focus","Barre d’adresse","Address bar","F6"),
+        new(0x22,2,"tab.next","Onglet suivant","Next tab","Page ↓"),
+        new(0x21,2,"tab.previous","Onglet précédent","Previous tab","Page ↑"),
+        new(0x52,6,"nav.reload","Recharger la page","Reload page","R"),
+        new(0x74,2,"nav.reload","Recharger la page","Reload page","F5"),
+        new(0x4A,6,"devtools.open","DevTools natifs","Native DevTools","J"),
     ];
 
     public static string TextFor(string action, bool english) => All.FirstOrDefault(s => s.Action == action)?.Text(english) ?? "";

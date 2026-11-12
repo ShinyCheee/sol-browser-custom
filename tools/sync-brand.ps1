@@ -4,13 +4,19 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $logo = Join-Path $root 'brand\logo-transparent.png'
 if (-not (Test-Path -LiteralPath $logo)) { throw 'Le logo transparent est requis avant de synchroniser les icônes.' }
 $wallpaper = Join-Path $root 'brand\wallpaper-original.png'
-foreach ($target in 'ui\src\assets\logo.png', 'docs\images\logo.png', 'docs\launch-film\assets\logo.png', 'landing\public\logo.png', 'landing\src\app\icon.png', 'landing\src\app\apple-icon.png') {
+foreach ($target in 'docs\images\logo.png', 'docs\launch-film\assets\logo.png', 'landing\public\logo.png', 'landing\src\app\icon.png', 'landing\src\app\apple-icon.png') {
     Copy-Item -LiteralPath $logo -Destination (Join-Path $root $target) -Force
 }
-foreach ($target in 'ui\src\assets\start-background.png', 'landing\public\wallpaper.png') {
-    Copy-Item -LiteralPath $wallpaper -Destination (Join-Path $root $target) -Force
-}
+Copy-Item -LiteralPath $wallpaper -Destination (Join-Path $root 'landing\public\wallpaper.png') -Force
 Add-Type -AssemblyName System.Drawing
+# Fond de la page d'accueil : une image sans transparence, douze fois plus légère en JPEG qu'en PNG.
+$image = [Drawing.Image]::FromFile($wallpaper)
+try {
+    $jpeg = [Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object MimeType -eq 'image/jpeg'
+    $quality = [Drawing.Imaging.EncoderParameters]::new(1)
+    $quality.Param[0] = [Drawing.Imaging.EncoderParameter]::new([Drawing.Imaging.Encoder]::Quality, [long]90)
+    $image.Save((Join-Path $root 'ui\src\assets\start-background.jpg'), $jpeg, $quality)
+} finally { $image.Dispose() }
 $source = [Drawing.Image]::FromFile($logo)
 $entries = @()
 try {
@@ -49,6 +55,8 @@ try {
         $g.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
         $g.DrawImage($source, 0, 0, 256, 256)
         $splash.Save((Join-Path $root 'src\Browser.App\Assets\setup-splash.png'), [Drawing.Imaging.ImageFormat]::Png)
+        # Logo de l'interface : affiché en 104 px au plus ; l'original de 1254 px coûtait 6 Mo décodés par vue.
+        $splash.Save((Join-Path $root 'ui\src\assets\logo.png'), [Drawing.Imaging.ImageFormat]::Png)
     } finally { $g.Dispose(); $splash.Dispose() }
     # Logo de la page d'accueil : affiché en 44 px, net jusqu'à 300 %, sans décoder l'original à chaque nouvel onglet.
     $small = [Drawing.Bitmap]::new(132, 132)

@@ -133,8 +133,12 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        DebugLog.Write("startup.launched");
+        _ = AdBlock.EnvironmentAsync(); // le moteur démarre pendant que la fenêtre se construit
         _window = new MainWindow();
+        DebugLog.Write("startup.window.created");
         _window.Activate();
+        DebugLog.Write("startup.window.activated");
         if (!AppPaths.Private) _ = Program.UpdateInBackgroundAsync();
     }
 }

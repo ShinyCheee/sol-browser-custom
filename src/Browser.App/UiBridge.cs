@@ -180,9 +180,11 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
         target.Opacity = 0; // aucune surface du moteur avant la première peinture React
         target.DefaultBackgroundColor = Microsoft.UI.Colors.Transparent;
         var environment = await AdBlock.EnvironmentAsync();
+        DebugLog.Write($"startup.engine.environment {targetPage}");
         var options = environment.CreateCoreWebView2ControllerOptions();
         options.ProfileName = "SolInterface"; // aucune extension de page ne peut injecter du code dans l’interface privilégiée
         await target.EnsureCoreWebView2Async(environment, options);
+        DebugLog.Write($"startup.engine.view {targetPage}");
         var core = target.CoreWebView2;
         core.SetVirtualHostNameToFolderMapping("ui.navigateur", uiFolder, CoreWebView2HostResourceAccessKind.Deny);
         core.Settings.AreDefaultContextMenusEnabled = false;

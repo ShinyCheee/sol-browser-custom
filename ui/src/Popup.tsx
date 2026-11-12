@@ -16,7 +16,7 @@ export default function Popup() {
   useLang();
   const [opening, setOpening] = useState(0); // change à chaque ouverture : rejoue l'apparition
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     let leaving = 0;
     const off = onMessage(data => {
       const select = (data as { select?: unknown }).select;
@@ -44,7 +44,8 @@ export default function Popup() {
     window.addEventListener('focus', focused);
     const key = (e: KeyboardEvent) => e.key === 'Escape' && close();
     window.addEventListener('keydown', key);
-    // The native host loads this view only when first needed; listeners must exist before replay.
+    // The native host loads this view only when first needed; listeners must exist before replay. Sent from a layout
+    // effect: in a still-hidden view the engine delays passive effects by seconds, and the menu would open late or never.
     send({type:'ui.ready'});
     return () => {
       off();

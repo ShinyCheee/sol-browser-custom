@@ -6,7 +6,7 @@ import {send,formatDomain} from './bridge';
 import {t} from './i18n';
 import {Icon} from './Icons';
 import type {Content,Item,Profile,Setting,Wallpaper} from './PopupTypes';
-import solWallpaper from './assets/start-background.png';
+import solWallpaper from './assets/start-background.jpg';
 export function HomeField({ home }: { home: string }) {
   const [text, setText] = useState(home);
   const save = () => text.trim() !== home && send({ type: 'settings.text', id: 'home', input: text });

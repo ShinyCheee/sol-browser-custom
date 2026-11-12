@@ -33,6 +33,7 @@ public sealed partial class MainWindow : Window
         _wndProc = WndProc;
         SetWindowSubclass(_hwnd, _wndProc, 1, 0);
         Activated += (_, e) => SetShortcuts(e.WindowActivationState != WindowActivationState.Deactivated);
+        Activated += (_, e) => _bridge?.SetAmbientPace(e.WindowActivationState != WindowActivationState.Deactivated);
         Closed += (_, _) => SetShortcuts(false);
 
         _ = StartInterfaceAsync();
@@ -94,6 +95,7 @@ public sealed partial class MainWindow : Window
 
     private async Task InitAsync()
     {
+        DebugLog.Write("startup.init");
         var settings = _settings;
         if (settings.ApplyFanDefault()) JsonFileStore.Save(AppPaths.Settings, settings);
         if (settings.Font == "custom") settings.Font = "sf"; // ancien nom du choix « SF Pro »
@@ -166,7 +168,9 @@ public sealed partial class MainWindow : Window
         WireSidebarGrip(settings);
         WireGestures();
 
+        DebugLog.Write("startup.wired");
         await bridge.InitAsync(uiFolder, _controller.Execute);
+        DebugLog.Write("startup.bridge.ready");
         dock.Hide();
     }
 

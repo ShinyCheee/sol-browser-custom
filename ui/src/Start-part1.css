@@ -11,7 +11,7 @@
 /* Quand l'image d'arrière-plan est activée dans les réglages : parfaitement cadrée (cover) avec ou sans sidebar. */
 :root[data-wallpaper="true"] .start-body {
   background-color: #050505;
-  background-image: url('./assets/start-background.png');
+  background-image: url('./assets/start-background.jpg');
   background-position: center center;
   background-size: cover;
   background-repeat: no-repeat;

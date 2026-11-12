@@ -33,6 +33,11 @@ try{
     assert(!targets.some(u=>u.endsWith('#popup')),'popup renderer is not loaded before first use');
     assert(!targets.some(u=>u.endsWith('#capture')),'capture renderer is not loaded before first use');
     assert(themeMessages<=1,'unchanged page does not broadcast its theme every second');
+    // Au repos, l'interface ne redessine rien : une boucle d'animation oubliée occupe un demi-cœur en permanence.
+    await ui.call('Performance.enable');
+    const layouts=async()=>(await ui.call('Performance.getMetrics')).metrics.find(m=>m.name==='LayoutCount').value;
+    const layoutsBefore=await layouts();await delay(5000);const idleLayouts=await layouts()-layoutsBefore;
+    assert(idleLayouts<30,`idle interface stays still (${idleLayouts} layouts in 5 s)`);
     await page.evaluate(`document.body.style.background='#132440'`);
     await host.wait(()=>ui.evaluate(`getComputedStyle(document.documentElement).getPropertyValue('--page-real').includes('19, 36, 64')`),'live theme follows a changed page');
     const normal=await ui.evaluate('window.__sidebarState.activeId');

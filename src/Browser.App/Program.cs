@@ -10,12 +10,14 @@ public static class Program
     [STAThread]
     private static void Main()
     {
+        DebugLog.Write("startup.main");
         // Installation, mise à jour, désinstallation : l'installateur relance Sol avec ses propres arguments, traités
         // ici avant toute fenêtre. Une mise à jour déjà téléchargée est aussi appliquée à ce moment.
 #if !SOL_STORE
         VelopackApp.Build().OnBeforeUninstallFastCallback(_ => WindowsBrowser.Unregister()).Run();
 #endif
 
+        DebugLog.Write("startup.velopack.done");
         WinRT.ComWrappersSupport.InitializeComWrappers();
         Application.Start(p =>
         {

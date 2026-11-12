@@ -1,15 +1,17 @@
 import { lazy, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import Workspace from './Workspace';
+import Sidebar from './Sidebar';
+// Les vues qui s'ouvrent dans une fenêtre encore masquée (menus, encart, panneau, capture) restent dans le code principal :
+// le moteur y retarde le chargement d'un module séparé. Les pages entières ne lisent que leur propre code.
 import Dock from './Dock';
-const SolChat = lazy(() => import('./SolChat'));
 import Panel from './Panel';
 import Popup from './Popup';
-import Sidebar from './Sidebar';
-import Welcome from './Welcome';
-import Start from './Start';
-import NotesPage from './NotesPage';
 import Capture from './Capture';
+const SolChat = lazy(() => import('./SolChat'));
+const Welcome = lazy(() => import('./Welcome'));
+const Start = lazy(() => import('./Start'));
+const NotesPage = lazy(() => import('./NotesPage'));
 import { painted, installTooltips } from './bridge';
 import '@fontsource-variable/inter'; // police Inter, livrée avec le navigateur (chargée seulement si elle est choisie)
 // Les autres polices proposées (licence SIL Open Font) : même principe, leurs fichiers ne sont lus que si on les choisit.
