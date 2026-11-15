@@ -14,9 +14,11 @@ public sealed partial class BrowserController
         Environment.GetEnvironmentVariable("NAVIGATEUR_CLOUD_API") ?? "https://br-wispy-night-b89mzp5p-backup.compute.c-14.us-east-1.aws.neon.tech");
     private const int CloudKeyLength = 12; // le fichier est hors de la machine : la clé doit résister à une attaque hors ligne
     // AutoKey : la clé gardée pour la sauvegarde automatique, protégée comme le reste de ce fichier par Windows.
-    private sealed record CloudSession(string Email, string Cookie, byte[] Salt, byte[] PasswordHash, string? AutoKey = null, DateTimeOffset? LastBackup = null, string? BackupId = null);
+    private sealed record CloudSession(string Email, string Cookie, byte[] Salt, byte[] PasswordHash, string? AutoKey = null, DateTimeOffset? LastBackup = null, string? BackupId = null, string? BackupKey = null);
+    private string? SavedCloudKey => _cloud?.BackupKey ?? _cloud?.AutoKey;
+    private bool CloudSignedIn => _cloud is { Cookie.Length: > 0 };
     private CloudSession? _cloud;
-    private bool _cloudLoaded, _cloudBusy, _cloudUpload;
+    private bool _cloudLoaded, _cloudBusy;
     private string? _cloudError, _cloudNotice;
     private IReadOnlyList<CloudBackup> _cloudBackups = [];
     private static string CloudFile => Path.Combine(AppPaths.DataDir, "cloud-session.bin");
@@ -26,7 +28,7 @@ public sealed partial class BrowserController
         LoadCloud();
         return new
         {
-            email = _cloud?.Email, busy = _cloudBusy, error = _cloudError, notice = _cloudNotice, auto = _cloud?.AutoKey is not null,
+            email = CloudSignedIn ? _cloud?.Email : null, busy = _cloudBusy, error = _cloudError, notice = _cloudNotice, auto = _cloud?.AutoKey is not null,
             last = _cloud?.LastBackup?.LocalDateTime.ToString("g", System.Globalization.CultureInfo.GetCultureInfo(Language.Current)),
             backups = _cloudBackups.Select(b => new { id = b.Id, device = b.Device, bytes = b.Bytes, date = b.CreatedAt.LocalDateTime.ToString("g", System.Globalization.CultureInfo.GetCultureInfo(Language.Current)) }),
         };
@@ -62,15 +64,16 @@ public sealed partial class BrowserController
         switch (c.Type)
         {
             case "cloud.sign": _ = CloudRunAsync(() => SignInCloudAsync(c.Query!.Trim(), c.Input!, c.Id == "up")); break;
-            case "cloud.signout": _cloud = null; _cloudBackups = []; _cloudError = _cloudNotice = null; SaveCloud(); PostCloud(); break;
-            case "cloud.refresh": if (_cloud is not null) _ = CloudRunAsync(RefreshCloudAsync); else PostCloud(); break;
+            case "cloud.signout": if (_cloudBusy) break; _cloud = null; _cloudBackups = []; _cloudError = _cloudNotice = null; SaveCloud(); PostCloud(); break;
+            case "cloud.refresh": if (CloudSignedIn) _ = CloudRunAsync(RefreshCloudAsync); else PostCloud(); break;
             case "cloud.backup":
-                if (_cloud is null || _cloudBusy) break;
-                _cloudUpload = true;
+                if (!CloudSignedIn || _cloudBusy) break;
+                if (SavedCloudKey is { } savedKey) { _ = UploadCloudAsync(savedKey); break; }
                 AskName(T("Clé de sauvegarde", "Backup key"),
-                    T($"Au moins {CloudKeyLength} caractères, différente du mot de passe du compte. Personne ne peut la retrouver : sans elle, la sauvegarde est perdue.", $"At least {CloudKeyLength} characters, different from your account password. Nobody can recover it: without it, the backup is lost."),
-                    T("Clé de sauvegarde", "Backup key"), T("Sauvegarder", "Back up"), "", "backup.export.key", secret: true);
+                    T($"Au moins {CloudKeyLength} caractères, différente du mot de passe du compte. Sol la conserve protégée par Windows pour les prochaines sauvegardes. Gardez-en une copie pour restaurer sur un autre PC.", $"At least {CloudKeyLength} characters, different from your account password. Sol keeps it protected by Windows for future backups. Keep a copy to restore on another PC."),
+                    T("Clé de sauvegarde", "Backup key"), T("Sauvegarder", "Back up"), "", "cloud.backup.key", secret: true);
                 break;
+            case "cloud.backup.key": if (CloudSignedIn && !_cloudBusy) _ = UploadCloudAsync(c.Title!); break;
             case "cloud.restore": _ = CloudRunAsync(() => DownloadCloudAsync(c.Id!)); break;
             case "cloud.auto" or "cloud.auto.key" or "cloud.restore.key": CloudAutoCommand(c); break;
             case "cloud.delete": _ = CloudRunAsync(async () => { await Cloud.DeleteAsync(_cloud!.Cookie, c.Id!); await RefreshCloudAsync(); }); break;
@@ -93,9 +96,16 @@ public sealed partial class BrowserController
         {
             DebugLog.Write($"cloud.failed {e.Code}");
             _cloudError = e.Code;
-            if (e.Code == "signed-out") { _cloud = null; _cloudBackups = []; SaveCloud(); }
+            if (e.Code == "signed-out") { if (_cloud is { } saved) _cloud = saved with { Cookie = "", BackupKey = SavedCloudKey }; _cloudBackups = []; SaveCloud(); }
+            if (e.Code == "key" && _cloud is { } rejected) { _cloud = rejected with { AutoKey = null, BackupKey = null }; SaveCloud(); }
         }
-        catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException or JsonException or CryptographicException or InvalidOperationException or Microsoft.Data.Sqlite.SqliteException)
+        catch (InvalidDataException e)
+        {
+            DebugLog.Write($"cloud.failed {e.GetType().Name}");
+            _cloudError = e.Message.StartsWith("Le contenu de la sauvegarde dépasse", StringComparison.Ordinal)
+                || e.Message.StartsWith("La sauvegarde dépasse", StringComparison.Ordinal) ? "backup-size" : "backup-invalid";
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException or CryptographicException or InvalidOperationException or Microsoft.Data.Sqlite.SqliteException)
         { DebugLog.Write($"cloud.failed {e.GetType().Name} {e.Message}"); _cloudError = "server"; }
         finally { _cloudBusy = false; PostCloud(); }
     }
@@ -106,7 +116,9 @@ public sealed partial class BrowserController
     {
         var cookie = await Cloud.SignInAsync(email, password, create);
         var salt = RandomNumberGenerator.GetBytes(16);
-        _cloud = new(email, cookie, salt, PasswordHash(password, salt));
+        var previous = string.Equals(_cloud?.Email, email, StringComparison.OrdinalIgnoreCase) ? _cloud : null;
+        _cloud = new(email, cookie, salt, PasswordHash(password, salt), previous?.AutoKey, previous?.LastBackup, previous?.BackupId,
+            previous?.BackupKey ?? previous?.AutoKey);
         SaveCloud();
         await RefreshCloudAsync();
     }
@@ -125,18 +137,19 @@ public sealed partial class BrowserController
     /// <param name="quiet">Sauvegarde automatique : aucun message si tout va bien.</param>
     private async Task UploadCloudAsync(string key, bool quiet = false)
     {
+        if (!CloudSignedIn || _cloudBusy) return;
         if (CloudKeyProblem(key) is { } problem) { Notice(T("Clé refusée", "Key rejected"), problem); return; }
         if (!quiet) HidePopup();
         PasswordBackupDocument? passwords = null;
         await CloudRunAsync(async () =>
         {
             var existing = await Cloud.ListAsync(_cloud!.Cookie);
-            var previous = existing.Where(b => b.Id == _cloud.BackupId || string.Equals(b.Device, Environment.MachineName, StringComparison.OrdinalIgnoreCase)).ToList();
+            var previous = existing.Where(b => string.Equals(b.Device, Environment.MachineName, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(b => b.Id == _cloud.BackupId).ToList();
             byte[]? previousBytes = null;
             if (previous.FirstOrDefault() is { } latest)
             {
-                try { previousBytes = await Cloud.DownloadAsync(_cloud.Cookie, latest.Id); }
-                catch (CloudException) { }
+                previousBytes = await Cloud.DownloadAsync(_cloud.Cookie, latest.Id);
             }
             var result = await SealProfileAsync(key, previousBytes);
             var sealedFile = result.File;
@@ -147,7 +160,7 @@ public sealed partial class BrowserController
                 try { await Cloud.DeleteAsync(_cloud.Cookie, old.Id); }
                 catch (CloudException) { }
             }
-            if (_cloud is { } session) { _cloud = session with { LastBackup = DateTimeOffset.UtcNow, BackupId = newId }; SaveCloud(); }
+            if (_cloud is { } session) { _cloud = session with { LastBackup = DateTimeOffset.UtcNow, BackupId = newId, BackupKey = key }; SaveCloud(); }
             await RefreshCloudAsync();
             _cloudNotice = "saved";
         });
@@ -172,6 +185,9 @@ public sealed partial class BrowserController
         "signed-out" => T("Votre session a expiré. Reconnectez-vous.", "Your session expired. Sign in again."),
         "network" => T("Connexion au service impossible.", "Could not reach the service."),
         "too-large" => T("La sauvegarde dépasse 256 Mo.", "The backup exceeds 256 MB."),
+        "backup-size" => T("Le profil dépasse la taille autorisée pour une sauvegarde. Votre sauvegarde existante est conservée.", "The profile exceeds the backup size limit. Your existing backup is kept."),
+        "backup-invalid" => T("Les données du profil n’ont pas pu être archivées. Votre sauvegarde existante est conservée.", "The profile could not be archived. Your existing backup is kept."),
+        "key" => T("La clé ne permet pas de lire la sauvegarde existante. Celle-ci a été conservée.", "The key cannot open the existing backup. That backup was kept."),
         _ => T("Le service a refusé la demande. Réessayez.", "The service rejected the request. Try again."),
     };
 
@@ -192,23 +208,20 @@ public sealed partial class BrowserController
         {
             try
             {
-                var files = Backup.Collect(AppPaths.DataDir);
-                files["browser.db"] = File.ReadAllBytes(copy);
-                var sessions = files.TryGetValue("tab-sessions.json", out var sessionJson)
-                    ? JsonSerializer.Deserialize<List<TabSession>>(sessionJson) ?? [] : [];
+                var sessionPath = Path.Combine(AppPaths.DataDir, "tab-sessions.json");
+                var sessions = File.Exists(sessionPath) ? JsonSerializer.Deserialize<List<TabSession>>(File.ReadAllBytes(sessionPath)) ?? [] : [];
                 var passwords = PasswordBackup.Collect(EngineData, sessions, temp, AppPaths.PendingPasswords);
-                if (previousBackup is not null && Backup.Open(previousBackup, key) is { } previousFiles)
+                if (previousBackup is not null)
                 {
-                    foreach (var (name, bytes) in previousFiles)
-                        if (name != Backup.Manifest && name != Backup.Passwords && !files.ContainsKey(name)) files[name] = bytes;
+                    var previousFiles = Backup.OpenEntry(previousBackup, key, Backup.Passwords) ?? throw new CloudException("key");
                     if (previousFiles.TryGetValue(Backup.Passwords, out var prevPass))
                     {
                         try { passwords = PasswordBackup.Merge(passwords, PasswordBackup.Decode(prevPass)) with { Unreadable = passwords.Unreadable }; }
                         catch (JsonException) { }
                     }
                 }
-                files[Backup.Passwords] = JsonSerializer.SerializeToUtf8Bytes(passwords);
-                return (Backup.Seal(files, key), passwords);
+                var files = new Dictionary<string, byte[]> { ["browser.db"] = File.ReadAllBytes(copy), [Backup.Passwords] = JsonSerializer.SerializeToUtf8Bytes(passwords) };
+                return (Backup.SealProfile(AppPaths.DataDir, files, key), passwords);
             }
             finally { File.Delete(copy); }
         });

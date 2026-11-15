@@ -6,6 +6,17 @@ using Browser.Core;
 public class BackupLimitsTests
 {
     [Fact]
+    public void Passwords_can_be_recovered_without_expanding_an_oversized_legacy_profile()
+    {
+        var legacy = Archive(5, 110 * 1024 * 1024);
+        Assert.Null(Backup.Open(legacy, "test key"));
+        var selected = Backup.OpenEntry(legacy, "test key", Backup.Passwords);
+        Assert.NotNull(selected);
+        Assert.Equal(new[] { Backup.Passwords }, selected.Keys);
+        Assert.Equal(0, PasswordBackup.Decode(selected[Backup.Passwords]).Exported);
+        Assert.Null(Backup.OpenEntry(legacy, "wrong key", Backup.Passwords));
+    }
+    [Fact]
     public void An_entry_declaring_excessive_expansion_is_rejected()
     {
         Assert.Null(Backup.Open(Archive(1, 256 * 1024 * 1024 + 1), "test key"));
@@ -37,13 +48,18 @@ public class BackupLimitsTests
     {
         using var plain = new MemoryStream();
         using (var zip = new ZipArchive(plain, ZipArchiveMode.Create, true))
+        {
             for (var n = 0; n < count; n++)
             {
                 using var entry = zip.CreateEntry($"extensions/{n}.js").Open();
             }
+            using var passwords = zip.CreateEntry(Backup.Passwords).Open();
+            passwords.Write("[]"u8);
+        }
         var zipBytes = plain.ToArray();
         for (var n = 0; n < zipBytes.Length - 28; n++)
-            if (BinaryPrimitives.ReadUInt32LittleEndian(zipBytes.AsSpan(n, 4)) == 0x02014b50)
+            if (BinaryPrimitives.ReadUInt32LittleEndian(zipBytes.AsSpan(n, 4)) == 0x02014b50
+                && System.Text.Encoding.UTF8.GetString(zipBytes, n + 46, BinaryPrimitives.ReadUInt16LittleEndian(zipBytes.AsSpan(n + 28, 2))) != Backup.Passwords)
                 BinaryPrimitives.WriteUInt32LittleEndian(zipBytes.AsSpan(n + 24, 4), declaredLength);
         var result = new byte[54 + zipBytes.Length];
         "SOLBACKUP1"u8.CopyTo(result);

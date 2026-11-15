@@ -69,8 +69,9 @@ public sealed class CloudAccount(HttpClient http, string authUrl, string apiUrl)
             using var put = await SendAsync(new HttpRequestMessage(HttpMethod.Put, url) { Content = content }, ct);
             if (!put.IsSuccessStatusCode) throw new CloudException("server");
         }
-        using var _ = await ApiAsync(session, HttpMethod.Post, "/backups/uploads/" + Uri.EscapeDataString(id), Json(new { device, replace }), ct);
-        return id;
+        using var finalized = await ApiAsync(session, HttpMethod.Post, "/backups/uploads/" + Uri.EscapeDataString(id), Json(new { device, replace, stableId = true }), ct);
+        using var result = JsonDocument.Parse(await finalized.Content.ReadAsStringAsync(ct));
+        return result.RootElement.GetProperty("id").GetString() ?? throw new CloudException("server");
     }
 
     public async Task<byte[]> DownloadAsync(string session, string id, CancellationToken ct = default)

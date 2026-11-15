@@ -49,7 +49,7 @@ const db = new pg.Client({ connectionString: env.DATABASE_URL });
 await db.connect();
 const row = await db.query('SELECT user_id, bytes FROM backups WHERE id = $1', [id]);
 assert.equal(row.rowCount, 1); assert.equal(Number(row.rows[0].bytes), sealed.length);
-assert.deepEqual(Object.keys((await db.query('SELECT * FROM backups LIMIT 1')).rows[0]).sort(), ['bytes', 'created_at', 'device', 'id', 'user_id']);
+assert.deepEqual(Object.keys((await db.query('SELECT * FROM backups LIMIT 1')).rows[0]).sort(), ['bytes', 'created_at', 'device', 'id', 'object_id', 'user_id']);
 await db.end(); ok('Postgres : seules des métadonnées, aucun contenu');
 
 for (let i = 0; i < 6; i++) assert.equal((await call(a, '/backups', { method: 'POST', body: sealed })).status, 201);
@@ -74,6 +74,20 @@ assert.equal(listed.bytes, big.length); assert.equal(listed.device, 'Grand PC');
 const { url } = await (await call(a, `/backups/${slot.id}/url`)).json();
 assert(Buffer.from(await (await fetch(url)).arrayBuffer()).equals(big)); ok('restauration de 24 Mo identique à l’octet près');
 assert.equal((await call(b, `/backups/${slot.id}/url`)).status, 404); ok('un autre compte n’obtient pas d’adresse de lecture');
+for (let i = 0; i < 3; i++) {
+  const newer = Buffer.concat([Buffer.from('SOLBACKUP1'), randomBytes(1024 + i)]);
+  const update = await (await call(a, '/backups/uploads', json({bytes: newer.length}))).json();
+  assert.equal((await fetch(update.url, {method: 'PUT', body: newer, headers: {'Content-Type': 'application/octet-stream'}})).status, 200);
+  const finalized = await call(a, `/backups/uploads/${update.id}`, json({device: 'Grand PC', replace: true, stableId: true}));
+  assert.equal(finalized.status, 201);
+  assert.equal((await finalized.json()).id, slot.id, 'updates keep the existing backup ID');
+  const same = (await (await call(a, '/backups')).json()).backups.filter(x => x.device === 'Grand PC');
+  assert.equal(same.length, 1); assert.equal(same[0].id, slot.id); assert.equal(same[0].bytes, newer.length);
+  const restored = await (await call(a, `/backups/${slot.id}/url`)).json();
+  assert(Buffer.from(await (await fetch(restored.url)).arrayBuffer()).equals(newer));
+  assert.equal((await (await call(a, `/backups/uploads/${update.id}`, json({device: 'Grand PC', replace: true, stableId: true}))).json()).id, slot.id);
+}
+ok('trois mises à jour : même identifiant, une seule sauvegarde et contenu restaurable à jour');
 const fake = await (await call(a, '/backups/uploads', json({ bytes: 4096 }))).json();
 await fetch(fake.url, { method: 'PUT', body: randomBytes(4096), headers: { 'Content-Type': 'application/octet-stream' } });
 assert.equal((await call(a, `/backups/uploads/${fake.id}`, json({}))).status, 400); ok('un fichier qui n’est pas une sauvegarde est refusé et effacé');

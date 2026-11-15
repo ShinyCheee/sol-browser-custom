@@ -7,7 +7,7 @@ export function fakeServices() {
   async function query(sql, p = []) {
     sql = sql.replace(/\s+/g, ' ').trim(); events.push({sql, p});
     const [id, userId, bytes] = p;
-    if (/^CREATE /.test(sql)) return result([]);
+    if (/^(CREATE|ALTER) /.test(sql)) return result([]);
     if (sql.startsWith('SELECT count(*)')) {
       const rows = [...uploads.values()].filter(r => r.user_id === id);
       return result([{count: rows.length, bytes: rows.reduce((s, r) => s + r.bytes, 0)}]);
@@ -26,10 +26,21 @@ export function fakeServices() {
       if (match) uploads.delete(id); return result(match ? [r] : []);
     }
     if (sql.startsWith('INSERT INTO backups')) {
-      assert(!backups.has(id)); backups.set(id, {id, user_id: userId, device: p[2], bytes: p[3], created_at: Date.now()}); return result([]);
+      assert(!backups.has(id)); backups.set(id, {id, object_id: id, user_id: userId, device: p[2], bytes: p[3], created_at: Date.now()}); return result([]);
     }
-    if (sql.startsWith('DELETE FROM backups WHERE user_id = $1 AND device = $2')) {
-      const replaced = [...backups.values()].filter(r => r.user_id === id && r.device === userId && r.id !== bytes);
+    if (sql.startsWith('SELECT id, coalesce(object_id, id)')) {
+      const rows = [...backups.values()].filter(r => r.user_id === id && r.device.toLowerCase() === userId.toLowerCase());
+      return result(rows.reverse().slice(0, 1).map(r => ({...r, object_id: r.object_id ?? r.id})));
+    }
+    if (sql.startsWith('SELECT id, bytes FROM backups')) {
+      return result([...backups.values()].filter(r => r.user_id === userId && (r.id === id || r.object_id === id)));
+    }
+    if (sql.startsWith('UPDATE backups SET object_id')) {
+      const r = backups.get(id); assert.equal(r.user_id, p[4]);
+      Object.assign(r, {object_id: p[1], bytes: p[2], device: p[3], created_at: Date.now()}); return result([r]);
+    }
+    if (sql.startsWith('DELETE FROM backups WHERE user_id = $1 AND lower(device)')) {
+      const replaced = [...backups.values()].filter(r => r.user_id === id && r.device.toLowerCase() === userId.toLowerCase() && r.id !== bytes);
       for (const r of replaced) backups.delete(r.id); return result(replaced);
     }
     if (sql.startsWith('DELETE FROM backups') && sql.includes('NOT IN')) {
@@ -38,11 +49,11 @@ export function fakeServices() {
     }
     if (sql.startsWith('SELECT user_id ||')) {
       const keys = new Set(id);
-      return result([...backups.values(), ...uploads.values()].map(r => ({key: `${r.user_id}/${r.id}.solbackup`})).filter(r => keys.has(r.key)));
+      return result([...backups.values(), ...uploads.values()].map(r => ({key: `${r.user_id}/${r.object_id ?? r.id}.solbackup`})).filter(r => keys.has(r.key)));
     }
-    if (/^SELECT (1|bytes) FROM backups/.test(sql) || sql.startsWith('DELETE FROM backups')) {
+    if (/^SELECT (1|bytes|coalesce\(object_id, id\))/.test(sql) || sql.startsWith('DELETE FROM backups')) {
       const r = backups.get(id), found = r?.user_id === userId;
-      if (found && sql.startsWith('DELETE')) backups.delete(id); return result(found ? [r] : []);
+      if (found && sql.startsWith('DELETE')) backups.delete(id); return result(found ? [{...r, object_id: r.object_id ?? r.id}] : []);
     }
     if (sql.startsWith('SELECT id, device, bytes::text')) return result([...backups.values()].filter(r => r.user_id === id));
     throw new Error(`unexpected SQL: ${sql}`);

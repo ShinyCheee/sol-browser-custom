@@ -95,11 +95,52 @@ test('replace updates the existing device backup in place without creating dupli
   const f = fixture();
   const first = await (await f.call('/backups/uploads', {bytes: sealed.length})).json();
   f.objects.set(objectKey('alice', first.id), {body: sealed, modified: Date.now()});
-  assert.equal((await f.call(`/backups/uploads/${first.id}`, {device: 'PC', replace: true})).status, 201);
+  assert.equal((await f.call(`/backups/uploads/${first.id}`, {device: 'PC', replace: true, stableId: true})).status, 201);
+  const second = await (await f.call('/backups/uploads', {bytes: sealed.length})).json();
+  const newer = Buffer.from('SOLBACKUP1newcipher');
+  assert.equal(newer.length, sealed.length);
+  f.objects.set(objectKey('alice', second.id), {body: newer, modified: Date.now()});
+  const updated = await f.call(`/backups/uploads/${second.id}`, {device: 'PC', replace: true, stableId: true});
+  assert.equal(updated.status, 201);
+  assert.equal((await updated.json()).id, first.id, 'the backup keeps its identity when updated');
+  assert.equal(f.backups.size, 1);
+  assert.ok(f.backups.has(first.id));
+  assert.ok(!f.objects.has(objectKey('alice', first.id)));
+  const listed = await (await f.call('/backups', null, 'GET')).json();
+  assert.equal(listed.backups[0].id, first.id);
+  assert(Buffer.from(await (await f.call(`/backups/${first.id}`, null, 'GET')).arrayBuffer()).equals(newer));
+  assert.equal((await (await f.call(`/backups/uploads/${second.id}`, {device: 'PC', replace: true, stableId: true})).json()).id, first.id);
+});
+
+test('an invalid replacement never modifies the current backup; old clients keep their upload identity', async () => {
+  const f = fixture();
+  const first = await (await f.call('/backups?device=PC', sealed)).json();
+  const invalid = await (await f.call('/backups/uploads', {bytes: sealed.length})).json();
+  f.objects.set(objectKey('alice', invalid.id), {body: Buffer.alloc(sealed.length), modified: Date.now()});
+  assert.equal((await f.call(`/backups/uploads/${invalid.id}`, {device: 'PC', replace: true, stableId: true})).status, 400);
+  assert(Buffer.from(await (await f.call(`/backups/${first.id}`, null, 'GET')).arrayBuffer()).equals(sealed));
+  const legacy = await (await f.call('/backups/uploads', {bytes: sealed.length})).json();
+  f.objects.set(objectKey('alice', legacy.id), {body: sealed, modified: Date.now()});
+  assert.equal((await (await f.call(`/backups/uploads/${legacy.id}`, {device: 'PC', replace: true})).json()).id, legacy.id);
+  assert.equal((await f.call(`/backups/${first.id}`, null, 'GET')).status, 404);
+  assert.equal((await f.call(`/backups/${legacy.id}`, null, 'GET')).status, 200);
+});
+
+test('a backup created before object pointers can be updated while deferred storage cleanup fails', async () => {
+  const f = fixture();
+  const first = await (await f.call('/backups?device=PC', sealed)).json();
+  f.backups.get(first.id).object_id = null; // A real pre-migration metadata row.
   const second = await (await f.call('/backups/uploads', {bytes: sealed.length})).json();
   f.objects.set(objectKey('alice', second.id), {body: sealed, modified: Date.now()});
-  assert.equal((await f.call(`/backups/uploads/${second.id}`, {device: 'PC', replace: true})).status, 201);
+  f.setFailDelete(true);
+  const response = await f.call(`/backups/uploads/${second.id}`, {device: 'pc', replace: true, stableId: true});
+  assert.equal(response.status, 201, 'successful publication must not report an upload failure after commit');
+  assert.equal((await response.json()).id, first.id);
   assert.equal(f.backups.size, 1);
-  assert.ok(f.backups.has(second.id));
-  assert.ok(!f.objects.has(objectKey('alice', first.id)));
+  assert(Buffer.from(await (await f.call(`/backups/${first.id}`, null, 'GET')).arrayBuffer()).equals(sealed));
+  f.setFailDelete(false);
+  f.objects.get(objectKey('alice', first.id)).modified = Date.now() - 7200000;
+  await backupStorage(f.pool, f.s3).cleanup();
+  assert(!f.objects.has(objectKey('alice', first.id)));
+  assert(f.objects.has(objectKey('alice', second.id)));
 });

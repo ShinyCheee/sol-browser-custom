@@ -11,6 +11,9 @@ export function backupStorage(pool: any, s3: any) {
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id text NOT NULL, device text NOT NULL,
       bytes bigint NOT NULL, created_at timestamptz NOT NULL DEFAULT now())`);
     await pool.query("CREATE INDEX IF NOT EXISTS backups_user ON backups (user_id, created_at DESC)");
+    // Stable backup identity; new ciphertext is staged separately before the pointer is switched atomically.
+    await pool.query("ALTER TABLE backups ADD COLUMN IF NOT EXISTS object_id uuid");
+    await pool.query("CREATE UNIQUE INDEX IF NOT EXISTS backups_object ON backups (object_id)");
     await pool.query(`CREATE TABLE IF NOT EXISTS backup_uploads (
       id uuid PRIMARY KEY, user_id text NOT NULL, bytes bigint NOT NULL,
       expires_at timestamptz NOT NULL DEFAULT now() + interval '1 hour')`);
@@ -39,19 +42,30 @@ export function backupStorage(pool: any, s3: any) {
     const {rows} = await pool.query("SELECT bytes FROM backup_uploads WHERE id = $1 AND user_id = $2 AND expires_at > now()", [id, userId]);
     return rows[0];
   }
-  async function register(userId: string, id: string, device: string, bytes: number, replace = false) {
-    const removed = await locked(userId, async db => {
+  async function register(userId: string, id: string, device: string, bytes: number, replace = false, stableId = false) {
+    const saved = await locked(userId, async db => {
       const {rowCount} = await db.query("DELETE FROM backup_uploads WHERE id = $1 AND user_id = $2 AND bytes = $3 AND expires_at > now() RETURNING id", [id, userId, bytes]);
-      if (!rowCount) throw new Error("upload reservation expired");
-      await db.query("INSERT INTO backups (id, user_id, device, bytes) VALUES ($1, $2, $3, $4)", [id, userId, device, bytes]);
+      if (!rowCount) {
+        const {rows} = await db.query("SELECT id, bytes FROM backups WHERE user_id = $2 AND (id = $1 OR object_id = $1)", [id, userId]);
+        if (rows[0]) return {id: rows[0].id, removed: []};
+        throw new Error("upload reservation expired");
+      }
+      const previous = replace && stableId ? (await db.query("SELECT id, coalesce(object_id, id) AS object_id FROM backups WHERE user_id = $1 AND lower(device) = lower($2) ORDER BY created_at DESC, id DESC LIMIT 1", [userId, device])).rows[0] : null;
+      const backupId = previous?.id ?? id;
+      if (previous) await db.query("UPDATE backups SET object_id = $2, bytes = $3, created_at = now(), device = $4 WHERE id = $1 AND user_id = $5", [backupId, id, bytes, device, userId]);
+      else await db.query("INSERT INTO backups (id, user_id, device, bytes, object_id) VALUES ($1, $2, $3, $4, $1)", [id, userId, device, bytes]);
       const replaced = replace
-        ? (await db.query("DELETE FROM backups WHERE user_id = $1 AND device = $2 AND id <> $3 RETURNING id", [userId, device, id])).rows
+        ? (await db.query("DELETE FROM backups WHERE user_id = $1 AND lower(device) = lower($2) AND id <> $3 RETURNING id, coalesce(object_id, id) AS object_id", [userId, device, backupId])).rows
         : [];
       const stale = (await db.query(`DELETE FROM backups WHERE user_id = $1 AND id NOT IN
-        (SELECT id FROM backups WHERE user_id = $1 ORDER BY created_at DESC, id DESC LIMIT 5) RETURNING id`, [userId])).rows;
-      return [...replaced, ...stale];
+        (SELECT id FROM backups WHERE user_id = $1 ORDER BY created_at DESC, id DESC LIMIT 5) RETURNING id, coalesce(object_id, id) AS object_id`, [userId])).rows;
+      return {id: backupId, removed: [...(previous ? [previous] : []), ...replaced, ...stale]};
     });
-    for (const row of removed) await s3.send(new DeleteObjectCommand({Bucket: BUCKET, Key: objectKey(userId, row.id)}));
+    for (const row of saved.removed) {
+      try { await s3.send(new DeleteObjectCommand({Bucket: BUCKET, Key: objectKey(userId, row.object_id)})); }
+      catch { console.warn("backup.cleanup.deferred"); } // The committed backup is valid; scheduled cleanup retries deletion.
+    }
+    return saved.id;
   }
   async function cleanup() {
     // L'expiration dépasse largement les quinze minutes des adresses signées.
@@ -70,8 +84,8 @@ export function backupStorage(pool: any, s3: any) {
       const keys = (page.Contents ?? []).filter((o: any) => o.Key && o.LastModified
         && o.LastModified.getTime() < Date.now() - 3600000).map((o: any) => o.Key);
       if (keys.length) {
-        const {rows} = await pool.query(`SELECT user_id || '/' || id || '.solbackup' AS key FROM backups
-          WHERE user_id || '/' || id || '.solbackup' = ANY($1::text[])
+        const {rows} = await pool.query(`SELECT user_id || '/' || coalesce(object_id, id) || '.solbackup' AS key FROM backups
+          WHERE user_id || '/' || coalesce(object_id, id) || '.solbackup' = ANY($1::text[])
           UNION ALL SELECT user_id || '/' || id || '.solbackup' AS key FROM backup_uploads
           WHERE user_id || '/' || id || '.solbackup' = ANY($1::text[])`, [keys]);
         const kept = new Set(rows.map((r: any) => r.key));

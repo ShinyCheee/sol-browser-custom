@@ -6,7 +6,7 @@ namespace Browser.App;
 
 public sealed partial class NetworkInspector
 {
-    public bool IsListening(string tabId) => _listening.Contains(tabId);
+    public bool IsListening(string tabId) => _capturing.Contains(tabId);
     public object AiCaptureState(string tabId) => new { listening = IsListening(tabId), paused = _paused.Contains(tabId),
         preserve = _preserve.Contains(tabId), mock = _mocks.GetValueOrDefault(tabId) is { } mock
             ? new { url = NetworkTools.SafeUrl(mock.Url), mock.Method, mock.Mode, mock.Status, mock.Delay } : null };

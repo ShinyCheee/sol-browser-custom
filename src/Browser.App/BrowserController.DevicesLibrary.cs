@@ -54,6 +54,7 @@ public sealed partial class BrowserController
                 if (_pages.CoreOf(mockId) is { } core) _ = _network.MockAsync(mockId,core,null);
             _tools.Hide();
             _network.Shown = null;
+            _ = _network.StopCaptureAsync();
         }
         else
         {

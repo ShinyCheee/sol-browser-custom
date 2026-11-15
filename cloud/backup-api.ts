@@ -62,8 +62,8 @@ export function createBackupApp({pool, s3, verify, sign}: any) {
     if (!validId(id)) return c.json({error: "not-found"}, 404);
     const reservation = await storage.pending(userId, id);
     if (!reservation) {
-      const {rows} = await pool.query("SELECT bytes FROM backups WHERE id = $1 AND user_id = $2", [id, userId]);
-      return rows[0] ? c.json({id, bytes: Number(rows[0].bytes)}, 201) : c.json({error: "not-found"}, 404);
+      const {rows} = await pool.query("SELECT id, bytes FROM backups WHERE user_id = $2 AND (id = $1 OR object_id = $1)", [id, userId]);
+      return rows[0] ? c.json({id: rows[0].id, bytes: Number(rows[0].bytes)}, 201) : c.json({error: "not-found"}, 404);
     }
     const key = objectKey(userId, id);
     const head = await s3.send(new HeadObjectCommand({Bucket: BUCKET, Key: key})).catch(() => null);
@@ -74,31 +74,31 @@ export function createBackupApp({pool, s3, verify, sign}: any) {
       await s3.send(new DeleteObjectCommand({Bucket: BUCKET, Key: key}));
       return c.json({error: "not-a-backup"}, 400);
     }
-    const {device, replace} = await c.req.json().catch(() => ({device: "", replace: false}));
-    await storage.register(userId, id, deviceOf(device), head.ContentLength, Boolean(replace));
-    return c.json({id, bytes: head.ContentLength}, 201);
+    const {device, replace, stableId} = await c.req.json().catch(() => ({device: "", replace: false, stableId: false}));
+    const backupId = await storage.register(userId, id, deviceOf(device), head.ContentLength, replace === true, stableId === true);
+    return c.json({id: backupId, bytes: head.ContentLength}, 201);
   });
   app.get("/backups/:id/url", async c => {
     const userId = c.get("userId"), id = c.req.param("id");
     if (!validId(id)) return c.json({error: "not-found"}, 404);
-    const {rowCount} = await pool.query("SELECT 1 FROM backups WHERE id = $1 AND user_id = $2", [id, userId]);
-    if (!rowCount) return c.json({error: "not-found"}, 404);
-    return c.json({url: await sign(new GetObjectCommand({Bucket: BUCKET, Key: objectKey(userId, id)}))});
+    const {rows} = await pool.query("SELECT coalesce(object_id, id) AS object_id FROM backups WHERE id = $1 AND user_id = $2", [id, userId]);
+    if (!rows[0]) return c.json({error: "not-found"}, 404);
+    return c.json({url: await sign(new GetObjectCommand({Bucket: BUCKET, Key: objectKey(userId, rows[0].object_id)}))});
   });
   app.get("/backups/:id", async c => {
     const userId = c.get("userId"), id = c.req.param("id");
     if (!validId(id)) return c.json({error: "not-found"}, 404);
-    const {rowCount} = await pool.query("SELECT 1 FROM backups WHERE id = $1 AND user_id = $2", [id, userId]);
-    if (!rowCount) return c.json({error: "not-found"}, 404);
-    const object = await s3.send(new GetObjectCommand({Bucket: BUCKET, Key: objectKey(userId, id)}));
+    const {rows} = await pool.query("SELECT coalesce(object_id, id) AS object_id FROM backups WHERE id = $1 AND user_id = $2", [id, userId]);
+    if (!rows[0]) return c.json({error: "not-found"}, 404);
+    const object = await s3.send(new GetObjectCommand({Bucket: BUCKET, Key: objectKey(userId, rows[0].object_id)}));
     return new Response(await object.Body!.transformToByteArray(), {headers: {"Content-Type": "application/octet-stream"}});
   });
   app.delete("/backups/:id", async c => {
     const userId = c.get("userId"), id = c.req.param("id");
     if (!validId(id)) return c.json({error: "not-found"}, 404);
-    const {rowCount} = await pool.query("DELETE FROM backups WHERE id = $1 AND user_id = $2", [id, userId]);
-    if (!rowCount) return c.json({error: "not-found"}, 404);
-    await s3.send(new DeleteObjectCommand({Bucket: BUCKET, Key: objectKey(userId, id)}));
+    const {rows} = await pool.query("DELETE FROM backups WHERE id = $1 AND user_id = $2 RETURNING coalesce(object_id, id) AS object_id", [id, userId]);
+    if (!rows[0]) return c.json({error: "not-found"}, 404);
+    await s3.send(new DeleteObjectCommand({Bucket: BUCKET, Key: objectKey(userId, rows[0].object_id)}));
     return c.body(null, 204);
   });
   return app;

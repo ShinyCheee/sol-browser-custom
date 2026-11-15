@@ -18,6 +18,9 @@ const errorText = (code: string) => ({
   network: t('Connexion au service impossible', 'Could not reach the service'),
   'signed-out': t('Votre session a expiré, reconnectez-vous', 'Your session expired, sign in again'),
   'too-large': t('La sauvegarde dépasse 256 Mo', 'The backup exceeds 256 MB'),
+  'backup-size': t('Le profil dépasse la taille autorisée. La sauvegarde existante est conservée.', 'The profile exceeds the size limit. The existing backup is kept.'),
+  'backup-invalid': t('Les données n’ont pas pu être archivées. La sauvegarde existante est conservée.', 'The data could not be archived. The existing backup is kept.'),
+  key: t('Cette clé n’ouvre pas la sauvegarde existante. Celle-ci est conservée.', 'This key cannot open the existing backup. That backup is kept.'),
 } as Record<string, string>)[code] ?? t('Le service a refusé la demande, réessayez', 'The service rejected the request, try again');
 
 const size = (bytes: number) => bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} ${t('Ko', 'KB')}` : `${(bytes / 1024 / 1024).toFixed(1)} ${t('Mo', 'MB')}`;
@@ -41,6 +44,7 @@ export default function SettingsCloud({ cloud, hidden }: { cloud: CloudState; hi
     {cloud.email
       ? <>
         <Button variant="ghost" size="sm" pressScale={0.97} className="pill-action primary sol-cloud-main" disabled={cloud.busy} onClick={() => send({ type: 'cloud.backup' })}>{cloud.busy ? t('En cours…', 'Working…') : t('Sauvegarder maintenant', 'Back up now')}</Button>
+        <p className="row-hint">{t('Met à jour la sauvegarde de ce PC avec la même clé, protégée par Windows.', 'Updates this PC’s backup with the same key, protected by Windows.')}</p>
         <div className="sol-cloud-auto">
           <span className="setting-text">
             <span className="row-title">{t('Sauvegarde automatique', 'Automatic backup')}</span>

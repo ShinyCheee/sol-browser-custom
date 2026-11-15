@@ -44,11 +44,12 @@ public sealed partial class NetworkInspector(Action<string> post)
 
     /// <summary>Onglet affiché par le panneau ; null : panneau fermé.</summary>
     public string? Shown { get; set; }
-    public bool Listening => Shown is { } tabId && _listening.Contains(tabId);
+    public bool Listening => Shown is { } tabId && _capturing.Contains(tabId);
 
     public async Task ListenAsync(string tabId, CoreWebView2 core)
     {
-        if (!_listening.Add(tabId)) return;
+        if (!_listening.Add(tabId)) { await SetCaptureAsync(tabId, core, true); return; }
+        _captureCores[tabId] = core;
         _preserve.Add(tabId);
         var log = _log[tabId] = new List<Entry>();
         var console = _console[tabId] = new List<object>();
@@ -92,18 +93,17 @@ public sealed partial class NetworkInspector(Action<string> post)
         });
         On(core, "Runtime.consoleAPICalled", p => {
             var text = p.TryGetProperty("args", out var args) ? string.Join(" ", args.EnumerateArray().Select(a => a.TryGetProperty("value", out var v) ? v.ToString() : Text(a,"description") ?? Text(a,"type") ?? "")) : "";
-            console.Add(new { level = Text(p,"type") ?? "log", text = NetworkTools.Redact(text) });
+            console.Add(new { level = Text(p,"type") ?? "log", text = NetworkTools.Redact(SolAiDiagnostics.Clip(text, 8192)) });
             if (console.Count > 200) console.RemoveAt(0);
         });
         On(core, "Runtime.exceptionThrown", p => {
             if (!p.TryGetProperty("exceptionDetails", out var details)) return;
             var text = details.TryGetProperty("exception", out var error) ? Text(error,"description") : Text(details,"text");
-            console.Add(new { level = "error", text = NetworkTools.Redact(text ?? "Error") });
+            console.Add(new { level = "error", text = NetworkTools.Redact(SolAiDiagnostics.Clip(text ?? "Error", 8192)) });
             if (console.Count > 200) console.RemoveAt(0);
         });
         On(core, "Fetch.requestPaused", p => { _ = PausedAsync(tabId, core, p.Clone()); });
-        try { await core.CallDevToolsProtocolMethodAsync("Network.enable", "{\"maxTotalBufferSize\":4194304,\"maxResourceBufferSize\":1048576,\"maxPostDataSize\":20000}"); await core.CallDevToolsProtocolMethodAsync("Runtime.enable", "{}"); }
-        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { _listening.Remove(tabId); }
+        await SetCaptureAsync(tabId, core, true);
 
         void On(CoreWebView2 target, string name, Action<JsonElement> handle)
         {
@@ -112,6 +112,7 @@ public sealed partial class NetworkInspector(Action<string> post)
             kept.Add(receiver);
             receiver.DevToolsProtocolEventReceived += (_, e) =>
             {
+                if (!_capturing.Contains(tabId) && name != "Fetch.requestPaused") return;
                 // Les réponses en cours se terminent ; la pause empêche uniquement les nouvelles captures.
                 if (_paused.Contains(tabId) && (name == "Network.requestWillBeSent" || name.StartsWith("Runtime."))) return;
                 try
@@ -158,6 +159,7 @@ public sealed partial class NetworkInspector(Action<string> post)
         _listening.Remove(tabId);
         _paused.Remove(tabId); _preserve.Remove(tabId);
         _receivers.Remove(tabId);
+        _capturing.Remove(tabId); _captureCores.Remove(tabId); _captureLocks.Remove(tabId);
         _console.Remove(tabId); _mocks.Remove(tabId); _results.Remove(tabId);
         _mockLocks.Remove(tabId);
         if (_mockCancel.Remove(tabId, out var mock)) { mock.Cancel(); mock.Dispose(); }
@@ -228,8 +230,15 @@ public sealed partial class NetworkInspector(Action<string> post)
     private static Dictionary<string, string> Headers(JsonElement e)
     {
         var headers = new Dictionary<string, string>();
+        var remaining = 8192;
         if (e.TryGetProperty("headers", out var all) && all.ValueKind == JsonValueKind.Object)
-            foreach (var header in all.EnumerateObject()) headers[header.Name] = NetworkTools.Secret(header.Name) ? NetworkTools.Mask : NetworkTools.Redact(header.Value.ToString());
+            foreach (var header in all.EnumerateObject())
+            {
+                if (remaining <= 0 || headers.Count >= 64) break;
+                var name = SolAiDiagnostics.Clip(header.Name, 256);
+                var value = NetworkTools.Secret(header.Name) ? NetworkTools.Mask : NetworkTools.Redact(SolAiDiagnostics.Clip(header.Value.ToString(), remaining));
+                headers[name] = value; remaining -= name.Length + value.Length;
+            }
         return headers;
     }
 

@@ -207,7 +207,6 @@ public sealed partial class BrowserController
     private async Task ExportBackupAsync(string key)
     {
         if (AppPaths.Private) return;
-        if (_cloudUpload) { _cloudUpload = false; await UploadCloudAsync(key); return; }
         if (key.Length < Backup.MinKeyLength) { AskBackupKey(export: true, tooShort: true); return; }
         HidePopup();
         var picker = new Windows.Storage.Pickers.FileSavePicker

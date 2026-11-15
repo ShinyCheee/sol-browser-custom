@@ -7,8 +7,8 @@ namespace Browser.Core;
 
 /// <summary>
 /// Fichier de sauvegarde d'un profil : ses fichiers, compressés puis chiffrés (AES-256-GCM) avec une clé tirée de la
-/// clé de sauvegarde choisie par l'utilisateur (PBKDF2-SHA256). Sans cette clé, le fichier est illisible ; Sol ne la
-/// garde nulle part. La restauration est d'abord mise de côté, puis appliquée au démarrage suivant, quand aucun
+/// clé de sauvegarde choisie par l'utilisateur (PBKDF2-SHA256). Sans cette clé, le fichier est illisible.
+/// La restauration est d'abord mise de côté, puis appliquée au démarrage suivant, quand aucun
 /// fichier du profil n'est encore ouvert.
 /// </summary>
 public static partial class Backup
@@ -31,20 +31,9 @@ public static partial class Backup
     /// <summary>Les fichiers du profil à sauvegarder, sauf la base (copiée à part pendant qu'elle est ouverte) et les mots de passe.</summary>
     public static Dictionary<string, byte[]> Collect(string dataDir)
     {
-        var files = new Dictionary<string, byte[]>();
-        var directories = new List<string>();
-        foreach (var name in ProfileFiles)
-            if (name != "browser.db" && File.Exists(Path.Combine(dataDir, name))) files[name] = File.ReadAllBytes(Path.Combine(dataDir, name));
-        foreach (var folder in ProfileFolders)
-        {
-            var root = Path.Combine(dataDir, folder);
-            if (!Directory.Exists(root)) continue;
-            directories.AddRange(Directory.EnumerateDirectories(root, "*", SearchOption.AllDirectories)
-                .Select(path => folder + "/" + Path.GetRelativePath(root, path).Replace('\\', '/')));
-            foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
-                files[folder + "/" + Path.GetRelativePath(root, file).Replace('\\', '/')] = File.ReadAllBytes(file);
-        }
-        files[Manifest] = JsonSerializer.SerializeToUtf8Bytes(new ProfileManifest(1, ProfileFiles, ProfileFolders, directories.ToArray()));
+        var (paths, manifest) = ProfileContent(dataDir);
+        var files = paths.ToDictionary(pair => pair.Key, pair => File.ReadAllBytes(pair.Value));
+        files[Manifest] = manifest;
         return files;
     }
     public const string Passwords = "passwords.json";
@@ -69,16 +58,23 @@ public static partial class Backup
             if (Allowed(name) && !names.Add(name)) throw new InvalidDataException("La sauvegarde contient des chemins ambigus.");
             expanded += bytes.Length;
         }
-        using var plain = new MemoryStream();
-        using (var zip = new ZipArchive(plain, ZipArchiveMode.Create, leaveOpen: true))
+        return SealArchive(key, zip =>
+        {
             foreach (var (name, bytes) in files)
             {
                 using var entry = zip.CreateEntry(name, CompressionLevel.Optimal).Open();
                 entry.Write(bytes);
             }
+        });
+    }
+
+    private static byte[] SealArchive(string key, Action<ZipArchive> write)
+    {
+        using var plain = new MemoryStream();
+        using (var zip = new ZipArchive(plain, ZipArchiveMode.Create, leaveOpen: true)) write(zip);
         if (plain.Length > MaxSealedBytes - Magic.Length - Salt - Nonce - Tag)
             throw new InvalidDataException("La sauvegarde dépasse 256 Mo.");
-        var data = plain.ToArray();
+        var data = plain.GetBuffer().AsSpan(0, checked((int)plain.Length));
         var output = new byte[Magic.Length + Salt + Nonce + Tag + data.Length];
         Magic.CopyTo(output, 0);
         var salt = output.AsSpan(Magic.Length, Salt);
@@ -92,7 +88,12 @@ public static partial class Backup
     }
 
     /// <summary>Le contenu d'une sauvegarde ; null si la clé n'est pas la bonne ou si le fichier n'en est pas une.</summary>
-    public static Dictionary<string, byte[]>? Open(byte[] file, string key)
+    public static Dictionary<string, byte[]>? Open(byte[] file, string key) => OpenEntries(file, key, null);
+
+    /// <summary>Lit une entrée sans décompresser les extensions et autres fichiers de l'ancienne sauvegarde.</summary>
+    public static Dictionary<string, byte[]>? OpenEntry(byte[] file, string key, string name) => OpenEntries(file, key, name);
+
+    private static Dictionary<string, byte[]>? OpenEntries(byte[] file, string key, string? only)
     {
         var header = Magic.Length + Salt + Nonce + Tag;
         if (file.Length < header || file.Length > MaxSealedBytes || !file.AsSpan(0, Magic.Length).SequenceEqual(Magic)) return null;
@@ -106,7 +107,7 @@ public static partial class Backup
             using var zip = new ZipArchive(new MemoryStream(data), ZipArchiveMode.Read);
             if (zip.Entries.Count > MaxEntries) return null;
             long declared = 0;
-            foreach (var entry in zip.Entries.Where(entry => Allowed(entry.FullName)))
+            foreach (var entry in zip.Entries.Where(entry => Allowed(entry.FullName) && (only is null || entry.FullName == only)))
             {
                 if (entry.Length > MaxEntryBytes || entry.Length > MaxExpandedBytes - declared) return null;
                 declared += entry.Length;
@@ -115,7 +116,7 @@ public static partial class Backup
             var buffer = new byte[81920];
             foreach (var entry in zip.Entries)
             {
-                if (!Allowed(entry.FullName)) continue;
+                if (!Allowed(entry.FullName) || only is not null && entry.FullName != only) continue;
                 if (entry.Length > MaxEntryBytes || entry.Length > MaxExpandedBytes - total || files.ContainsKey(entry.FullName)) return null;
                 using var content = new MemoryStream();
                 using var stream = entry.Open();

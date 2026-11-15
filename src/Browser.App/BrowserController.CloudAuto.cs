@@ -21,7 +21,7 @@ public sealed partial class BrowserController
         {
             _cloudAutoTimer.Interval = TimeSpan.FromMinutes(30);
             LoadCloud();
-            if (_closingWindow || _cloudBusy || _cloud is not { AutoKey: { } key } session) return;
+            if (_closingWindow || _cloudBusy || _cloud is not { Cookie.Length: > 0, AutoKey: { } key } session) return;
             if (session.LastBackup is { } last && DateTimeOffset.UtcNow - last < CloudAutoEvery) return;
             DebugLog.Write("cloud.auto.start");
             _ = UploadCloudAsync(key, quiet: true);
@@ -34,25 +34,32 @@ public sealed partial class BrowserController
         switch (c.Type)
         {
             case "cloud.auto" when c.Index == 0:
-                if (_cloud is { } session) { _cloud = session with { AutoKey = null }; SaveCloud(); }
+                if (_cloud is { } session) { _cloud = session with { AutoKey = null, BackupKey = SavedCloudKey }; SaveCloud(); }
                 PostCloud();
                 break;
             case "cloud.auto":
-                if (_cloud is null || _cloudBusy) break;
+                if (!CloudSignedIn || _cloudBusy || _cloud is not { } active) break;
+                if (SavedCloudKey is { } savedKey)
+                {
+                    _cloud = active with { AutoKey = savedKey, BackupKey = savedKey };
+                    SaveCloud(); PostCloud();
+                    _ = UploadCloudAsync(savedKey, quiet: _welcome.IsOpen);
+                    break;
+                }
                 AskName(T("Sauvegarde automatique", "Automatic backup"),
                     T($"Votre clé de sauvegarde, au moins {CloudKeyLength} caractères et différente du mot de passe du compte. Sol la garde, chiffrée par Windows pour votre compte, pour sauvegarder seul toutes les 24 h.",
                       $"Your backup key, at least {CloudKeyLength} characters and different from your account password. Sol keeps it, encrypted by Windows for your account, to back up on its own every 24 h."),
                     T("Clé de sauvegarde", "Backup key"), T("Activer", "Turn on"), "", "cloud.auto.key", secret: true);
                 break;
             case "cloud.auto.key":
-                if (_cloud is not { } current) break;
+                if (!CloudSignedIn || _cloudBusy || _cloud is not { } current) break;
                 if (CloudKeyProblem(c.Title!) is { } problem)
                 {
                     // L'accueil affiche l'erreur dans sa page ; ailleurs, une note la signale.
                     if (_welcome.IsOpen) { _cloudError = "key-rule"; PostCloud(); } else Notice(T("Clé refusée", "Key rejected"), problem);
                     break;
                 }
-                _cloud = current with { AutoKey = c.Title };
+                _cloud = current with { AutoKey = c.Title, BackupKey = c.Title };
                 SaveCloud();
                 _ = UploadCloudAsync(c.Title!, quiet: _welcome.IsOpen);
                 break;
@@ -70,7 +77,7 @@ public sealed partial class BrowserController
         if (files is null) { _cloudError = "key"; return; }
         await Task.Run(() => Backup.Stage(AppPaths.DataDir, files));
         // La même clé continue les sauvegardes automatiques sur ce PC.
-        _cloud = _cloud with { AutoKey = key, LastBackup = DateTimeOffset.UtcNow, BackupId = id };
+        _cloud = _cloud with { AutoKey = key, BackupKey = key, LastBackup = DateTimeOffset.UtcNow, BackupId = id };
         SaveCloud();
         _settings.Onboarded = true;
         JsonFileStore.Save(AppPaths.Settings, _settings);

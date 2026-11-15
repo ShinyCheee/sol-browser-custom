@@ -16,4 +16,15 @@ public sealed class TabMemoryPolicyTests
         Assert.Equal(TimeSpan.FromSeconds(suspendSeconds), policy.SuspendAfter);
         Assert.Equal(TimeSpan.FromSeconds(discardSeconds), policy.DiscardAfter);
     }
+
+    [Fact]
+    public void Pressure_shortens_hidden_tab_retention_but_unknown_available_memory_does_not()
+    {
+        var normal = TabMemoryPolicy.ForMemory(8192);
+        var pressured = TabMemoryPolicy.ForMemory(8192, 256);
+        Assert.True(pressured.SuspendAfter < normal.SuspendAfter);
+        Assert.True(pressured.DiscardAfter < normal.DiscardAfter);
+        Assert.Equal(normal, TabMemoryPolicy.ForMemory(8192, 0));
+        Assert.Equal(normal, TabMemoryPolicy.ForMemory(8192, 4096));
+    }
 }

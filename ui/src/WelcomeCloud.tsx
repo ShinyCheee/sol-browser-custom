@@ -13,6 +13,8 @@ const errorText = (code: string) => ({
   network: t('Connexion au service impossible', 'Could not reach the service'),
   key: t('Cette clé n’ouvre pas la sauvegarde', 'This key does not open the backup'),
   'key-rule': t('Au moins 12 caractères, différente du mot de passe du compte', 'At least 12 characters, different from the account password'),
+  'backup-size': t('Le profil dépasse la taille autorisée. La sauvegarde existante est conservée.', 'The profile exceeds the size limit. The existing backup is kept.'),
+  'backup-invalid': t('Les données n’ont pas pu être archivées. La sauvegarde existante est conservée.', 'The data could not be archived. The existing backup is kept.'),
 } as Record<string, string>)[code] ?? t('Le service a refusé la demande, réessayez', 'The service rejected the request, try again');
 
 // Étape de l'accueil : compte Sol. Une sauvegarde trouvée est restaurée en entier, sinon la sauvegarde automatique est proposée.

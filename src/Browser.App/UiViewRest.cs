@@ -38,6 +38,13 @@ internal sealed class UiViewRest(WebView2 view, Func<bool> visible, string name,
             DebugLog.Write($"ui.rest {name} {suspended}");
         }
         catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException)
-        { DebugLog.Write($"ui.rest.failed {name} {e.HResult}"); }
+        {
+            if (generation == _generation && !visible())
+            {
+                try { core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low; }
+                catch (Exception closed) when (closed is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
+            }
+            DebugLog.Write($"ui.rest.failed {name} {e.HResult}");
+        }
     }
 }
