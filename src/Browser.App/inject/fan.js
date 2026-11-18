@@ -8,7 +8,7 @@
   const webview = window.chrome?.webview;
   if (!webview) return;
   window.__solFan = true;
-  const post = webview.postMessage.bind(webview);
+  const post = webview.postMessage.bind(webview), stringify = JSON.stringify, assign = Object.assign, createNull = Object.create;
   let config = /*__SOL_FAN_SETTINGS__*/null || { enabled: true, trigger: 2 };
   let pending = null, openTimer = 0;
   const cancelOpen = () => { clearTimeout(openTimer); openTimer = 0; pending = null; };
@@ -281,8 +281,8 @@
     if (!b || !current || !e.isTrusted || !config.enabled) return;
     const [action, , value] = current.actions[Number(b.dataset.i)];
     const r = rectOf(current);
-    post(JSON.stringify({ sol: 'fan', key: KEY, kind: current.kind, action, value: String(value).slice(0, 50000),
-      x: r.right, y: r.top, ratio: devicePixelRatio, title: document.title, language: document.documentElement.lang || '' }));
+    post(stringify(assign(createNull(null), { sol: 'fan', key: KEY, kind: current.kind, action, value: String(value).slice(0, 50000),
+      x: r.right, y: r.top, ratio: devicePixelRatio, title: document.title, language: document.documentElement.lang || '' })));
     dismiss();
   }
 })();

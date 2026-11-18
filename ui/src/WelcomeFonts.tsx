@@ -1,6 +1,6 @@
 import {useState,type CSSProperties,type KeyboardEvent} from 'react';
 import {RadioGroup,RadioGroupItem} from '@/components/motion/radio';
-import {Button} from '@/components/motion/button';
+import {Button} from '@/components/motion/button/base';
 import {t} from './i18n';
 
 export const families=['Inter Variable','Segoe UI','Inter Variable','Inter Variable','Segoe UI','Segoe UI','Geist Variable','Manrope Variable','DM Sans Variable','Plus Jakarta Sans Variable','Outfit Variable','Figtree Variable','Nunito Variable','Lora Variable'];

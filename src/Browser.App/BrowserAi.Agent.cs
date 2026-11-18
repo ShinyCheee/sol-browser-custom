@@ -20,8 +20,6 @@ public sealed partial class BrowserController
             approval = Pending is { } p ? new { id = p.Id, label = p.Label, detail = p.Detail } : null,
         };
     }
-    private static readonly HttpClient LinkHttp = new(new SocketsHttpHandler { UseCookies = false, AllowAutoRedirect = true, MaxAutomaticRedirections = 5 })
-    { Timeout = TimeSpan.FromSeconds(15) };
     private string? _agentScript;
 
     private void AnswerApproval(Command c)
@@ -109,7 +107,7 @@ public sealed partial class BrowserController
             _pages.Navigate(tabId, target);
             return """{"ok":true,"note":"The page is loading; call read_page to see it."}""";
         }
-        if (_pages.CoreOf(tabId) is not { } core || !IsWebAddress(core.Source) || core.Source.StartsWith("https://start.sol/"))
+        if (_pages.CoreOf(tabId) is not { } core || !IsWeb(core.Source) || core.Source.StartsWith("https://start.sol/"))
             return ToolError("no readable web page is open");
         if (call.Name == "wait_for_page")
         {
@@ -154,16 +152,7 @@ public sealed partial class BrowserController
         var result = await EvaluateAsync(core, expression);
         // Lien d'un autre site : lu par Sol sans cookies, et seulement s'il figure parmi les liens de la page.
         if (call.Name == "read_link" && JsonNode.Parse(result)?["external"]?.GetValue<string>() is { } external)
-        {
-            var listed = JsonSerializer.Deserialize<string[]>(await EvaluateAsync(core, "A.links()")) ?? [];
-            if (!listed.Contains(external) || !Uri.TryCreate(external, UriKind.Absolute, out var link) || link.Scheme is not ("http" or "https"))
-                return """{"ok":false,"error":"only links listed by read_page can be read on other sites"}""";
-            using var response = await LinkHttp.GetAsync(link, HttpCompletionOption.ResponseHeadersRead, ct);
-            var type = response.Content.Headers.ContentType?.MediaType ?? "";
-            if (!type.Contains("html") && !type.StartsWith("text/")) return JsonSerializer.Serialize(new { ok = false, error = "not a text page: " + type });
-            var body = await response.Content.ReadAsStringAsync(ct);
-            return JsonSerializer.Serialize(new { ok = response.IsSuccessStatusCode, url = link.AbsoluteUri, text = SolAiAgent.HtmlText(body[..Math.Min(body.Length, 2_000_000)]) });
-        }
+            return await ReadExternalLinkAsync(core, external, ct);
         return result;
     }
 

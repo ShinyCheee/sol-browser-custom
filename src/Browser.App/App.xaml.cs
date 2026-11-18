@@ -84,7 +84,7 @@ public partial class App : Application
             {
                 DebugLog.Write($"restore.startup {e}");
                 var english = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "en";
-                RestoreError(0, (english ? "Sol could not finish restoring your data. Your profile will remain closed."
+                Win32Interop.MessageBox(0, (english ? "Sol could not finish restoring your data. Your profile will remain closed."
                     : "Sol ne peut pas terminer la restauration. Le profil ne sera pas ouvert.") + $"\n\n{e.Message}",
                     english ? "Sol — restore interrupted" : "Sol — restauration interrompue", 0x10);
                 Environment.Exit(1);
@@ -101,7 +101,7 @@ public partial class App : Application
         {
             SessionStartupDiagnostics.Record("profile.read", error);
             var english = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "en";
-            RestoreError(0, english
+            Win32Interop.MessageBox(0, english
                 ? "Sol could not read your saved tabs or settings. Your files have been preserved. Close Sol and try again."
                 : "Sol ne peut pas lire vos onglets ou réglages enregistrés. Vos fichiers ont été conservés. Fermez Sol et réessayez.",
                 english ? "Sol — profile unavailable" : "Sol — profil indisponible", 0x10);
@@ -127,9 +127,6 @@ public partial class App : Application
         held.Dispose();
         return true;
     }
-
-    [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "MessageBoxW", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
-    private static extern int RestoreError(nint window, string text, string caption, uint type);
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {

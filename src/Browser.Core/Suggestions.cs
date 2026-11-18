@@ -31,7 +31,8 @@ public static class Suggestions
 
         // Première ligne : ce que fera la touche Entrée.
         var resolved = AddressInput.Resolve(q, searchUrlTemplate);
-        var isSearch = resolved.StartsWith(searchUrlTemplate.Split("{0}")[0], StringComparison.Ordinal);
+        var searchTarget = AddressInput.FormatSearchUrl(searchUrlTemplate, q);
+        var isSearch = resolved != QuickNotes.PageUrl && resolved == searchTarget;
         var list = new List<Suggestion> { new(resolved, resolved == QuickNotes.PageUrl ? "Notes" : q, isSearch ? "search" : "go") };
 
         list.AddRange(history.Select(v => new Suggestion(v.Url, v.Title, "history")));
@@ -51,7 +52,7 @@ public static class Suggestions
         // Complétions du moteur de recherche : chacune lance cette recherche.
         foreach (var text in online ?? [])
             if (!text.Equals(q, StringComparison.OrdinalIgnoreCase))
-                list.Add(new Suggestion(string.Format(searchUrlTemplate, Uri.EscapeDataString(text)), text, "search"));
+                list.Add(new Suggestion(AddressInput.FormatSearchUrl(searchUrlTemplate, text), text, "search"));
 
         return list.Take(limit).ToList();
     }

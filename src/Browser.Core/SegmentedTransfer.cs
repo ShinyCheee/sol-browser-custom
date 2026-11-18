@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
@@ -51,7 +52,7 @@ public static class SegmentedTransfer
         CancellationToken ct, Func<string, bool>? accept = null, Action<int>? connections = null, int parts = Connections)
     {
         var saved = File.Exists(path) && File.Exists(PlanPath(path)) ? SegmentPlan.FromJson(await File.ReadAllTextAsync(PlanPath(path), ct)) : null;
-        if (saved is not null && new FileInfo(path).Length != saved.Total) saved = null;
+        if (saved?.Validator is null || new FileInfo(path).Length != saved.Total) saved = null;
         try { return await RunOnceAsync(http, request, path, progress, ct, accept, connections, parts, saved); }
         catch (InvalidDataException) when (saved is not null)
         {
@@ -66,81 +67,93 @@ public static class SegmentedTransfer
     {
         HttpResponseMessage? first = null;
         var mediaType = "";
-        if (plan is null)
+        try
         {
-            var probe = request();
-            probe.Headers.Range = new RangeHeaderValue(0, null);
-            first = await SendAsync(http, probe, ct);
-            mediaType = first.Content.Headers.ContentType?.MediaType ?? "";
-            if (accept is not null && !accept(mediaType)) { first.Dispose(); throw new IOException("Unexpected content"); }
-            var total = first.Content.Headers.ContentRange?.Length ?? 0;
-            if (first.StatusCode != HttpStatusCode.PartialContent || first.Content.Headers.ContentRange?.From != 0 || total < MinSplit)
-                return await SingleAsync(first, path, progress, mediaType, ct);
-            plan = SegmentPlan.Split(total, parts, Validator(first));
-            File.Delete(PlanPath(path));
-            await using (var create = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read)) create.SetLength(total);
-        }
-
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        var received = plan.Done; var active = 0;
-        var clock = Stopwatch.StartNew(); var gate = new object();
-        void Report(bool force)
-        {
-            lock (gate) { if (!force && clock.ElapsedMilliseconds < 120) return; clock.Restart(); }
-            progress(Interlocked.Read(ref received), plan.Total);
-        }
-        using var handle = File.OpenHandle(path, FileMode.Open, FileAccess.Write, FileShare.Read, FileOptions.Asynchronous);
-        Report(true);
-
-        async Task Worker(Segment? segment, HttpResponseMessage? response)
-        {
-            connections?.Invoke(Interlocked.Increment(ref active));
-            try
+            if (plan is null)
             {
-                while (segment is not null)
+                var probe = request();
+                probe.Headers.Range = new RangeHeaderValue(0, null);
+                first = await SendAsync(http, probe, ct);
+                mediaType = first.Content.Headers.ContentType?.MediaType ?? "";
+                if (accept is not null && !accept(mediaType)) throw new IOException("Unexpected content");
+                var total = first.Content.Headers.ContentRange?.Length ?? 0;
+                if (first.StatusCode != HttpStatusCode.PartialContent || first.Content.Headers.ContentRange?.From != 0 || total < MinSplit)
                 {
-                    await FetchAsync(http, request, plan, segment, response, handle, n => { Interlocked.Add(ref received, n); Report(false); }, linked.Token);
-                    response = null;
-                    lock (plan) { segment.Taken = false; segment = plan.Next(MinSteal); }
+                    var single = first; first = null;
+                    return await SingleAsync(http, request, single, path, progress, mediaType, accept, ct);
+                }
+                plan = SegmentPlan.Split(total, parts, Validator(first));
+                File.Delete(PlanPath(path));
+                await using (var create = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read)) create.SetLength(total);
+            }
+
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            var received = plan.Done; var active = 0;
+            var clock = Stopwatch.StartNew(); var gate = new object();
+            void Report(bool force)
+            {
+                lock (gate) { if (!force && clock.ElapsedMilliseconds < 120) return; clock.Restart(); }
+                progress(Interlocked.Read(ref received), plan.Total);
+            }
+            using var handle = File.OpenHandle(path, FileMode.Open, FileAccess.Write, FileShare.Read, FileOptions.Asynchronous);
+            Report(true);
+
+            async Task Worker(Segment? segment, HttpResponseMessage? response)
+            {
+                var rented = ArrayPool<byte>.Shared.Rent(Buffer);
+                connections?.Invoke(Interlocked.Increment(ref active));
+                try
+                {
+                    while (segment is not null)
+                    {
+                        var current = response; response = null;
+                        await FetchAsync(http, request, plan, segment, current, rented, handle,
+                            n => { Interlocked.Add(ref received, n); Report(false); }, linked.Token);
+                        lock (plan) { segment.Taken = false; segment = plan.Next(MinSteal); }
+                    }
+                }
+                catch { linked.Cancel(); throw; }
+                finally
+                {
+                    response?.Dispose();
+                    ArrayPool<byte>.Shared.Return(rented);
+                    connections?.Invoke(Interlocked.Decrement(ref active));
                 }
             }
-            catch { linked.Cancel(); throw; }
-            finally { connections?.Invoke(Interlocked.Decrement(ref active)); }
-        }
 
-        var initial = new List<Segment>();
-        lock (plan)
-        {
-            foreach (var s in plan.Segments) s.Taken = false;
-            for (var i = 0; i < parts && plan.Next(MinSteal) is { } segment; i++) initial.Add(segment);
+            var initial = new List<Segment>();
+            lock (plan)
+            {
+                foreach (var s in plan.Segments) s.Taken = false;
+                for (var i = 0; i < parts && plan.Next(MinSteal) is { } segment; i++) initial.Add(segment);
+            }
+            // Lancées hors du verrou : une connexion rapide ne doit pas tenir le plan pendant que les autres démarrent.
+            // La réponse de la sonde (plage 0-) sert la première plage : aucune requête perdue.
+            var workers = initial.Select((segment, i) => Worker(segment, i == 0 && segment.Start == 0 ? Interlocked.Exchange(ref first, null) : null)).ToList();
+            first?.Dispose(); first = null;
+            try { await Task.WhenAll(workers); }
+            catch
+            {
+                await Task.WhenAll(workers.Select(w => w.ContinueWith(_ => { }, TaskScheduler.Default)));
+                if (ct.IsCancellationRequested && plan.Validator is not null)
+                    lock (plan) File.WriteAllText(PlanPath(path), plan.ToJson()); // pause : chaque plage reprendra où elle en était
+                else if (!ct.IsCancellationRequested) File.Delete(PlanPath(path));
+                ct.ThrowIfCancellationRequested();
+                // Les autres connexions ont été annulées par la première en échec : c'est son erreur qui compte.
+                var cause = workers.Where(w => w.IsFaulted).SelectMany(w => w.Exception!.InnerExceptions).FirstOrDefault(e => e is not OperationCanceledException);
+                if (cause is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(cause);
+                throw;
+            }
+            File.Delete(PlanPath(path));
+            Report(true);
+            return new TransferResult(plan.Total, mediaType, true);
         }
-        // Lancées hors du verrou : une connexion rapide ne doit pas tenir le plan pendant que les autres démarrent.
-        // La réponse de la sonde (plage 0-) sert la première plage : aucune requête perdue.
-        var workers = initial.Select((segment, i) => Worker(segment, i == 0 && segment.Start == 0 ? first : null)).ToList();
-        if (first is not null && workers.Count == 0) first.Dispose();
-        try { await Task.WhenAll(workers); }
-        catch
-        {
-            await Task.WhenAll(workers.Select(w => w.ContinueWith(_ => { }, TaskScheduler.Default)));
-            first?.Dispose();
-            if (ct.IsCancellationRequested && plan.Validator is not null)
-                lock (plan) File.WriteAllText(PlanPath(path), plan.ToJson()); // pause : chaque plage reprendra où elle en était
-            else if (!ct.IsCancellationRequested) File.Delete(PlanPath(path));
-            ct.ThrowIfCancellationRequested();
-            // Les autres connexions ont été annulées par la première en échec : c'est son erreur qui compte.
-            var cause = workers.Where(w => w.IsFaulted).SelectMany(w => w.Exception!.InnerExceptions).FirstOrDefault(e => e is not OperationCanceledException);
-            if (cause is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(cause);
-            throw;
-        }
-        File.Delete(PlanPath(path));
-        Report(true);
-        return new TransferResult(plan.Total, mediaType, true);
+        finally { first?.Dispose(); }
     }
 
     private static async Task FetchAsync(HttpClient http, Func<HttpRequestMessage> request, SegmentPlan plan, Segment segment, HttpResponseMessage? response,
-        SafeFileHandle handle, Action<long> wrote, CancellationToken ct)
+        byte[] buffer, SafeFileHandle handle, Action<long> wrote, CancellationToken ct)
     {
-        var buffer = new byte[Buffer];
         for (var attempt = 1; ; attempt++)
         {
             try
@@ -154,7 +167,8 @@ public static class SegmentedTransfer
                     next.Headers.Range = new RangeHeaderValue(from, to);
                     if (plan.Validator is { } validator) next.Headers.TryAddWithoutValidation("If-Range", validator);
                     response = await SendAsync(http, next, ct);
-                    if (response.StatusCode != HttpStatusCode.PartialContent || response.Content.Headers.ContentRange?.From != from)
+                    if (response.StatusCode != HttpStatusCode.PartialContent
+                        || response.Content.Headers.ContentRange is not { From: var f, Length: var l } || f != from || l != plan.Total)
                         throw new InvalidDataException("Range refused or file changed");
                 }
                 using (response)
@@ -162,11 +176,16 @@ public static class SegmentedTransfer
                     await using var input = await response.Content.ReadAsStreamAsync(ct);
                     while (true)
                     {
-                        var read = await input.ReadAsync(buffer, ct);
+                        var read = await input.ReadAsync(buffer.AsMemory(0, Buffer), ct);
                         if (read == 0) break;
                         (long Offset, int Count) slot;
                         lock (plan) slot = SegmentPlan.Reserve(segment, read);
-                        if (slot.Count > 0) { await RandomAccess.WriteAsync(handle, buffer.AsMemory(0, slot.Count), slot.Offset, ct); wrote(slot.Count); }
+                        if (slot.Count > 0)
+                        {
+                            try { await RandomAccess.WriteAsync(handle, buffer.AsMemory(0, slot.Count), slot.Offset, CancellationToken.None); }
+                            catch { lock (plan) segment.Position = slot.Offset; throw; }
+                            wrote(slot.Count);
+                        }
                         if (slot.Count < read) return; // la fin de la plage a été donnée à une autre connexion
                     }
                 }
@@ -179,26 +198,47 @@ public static class SegmentedTransfer
                 response?.Dispose(); response = null;
                 await Task.Delay(TimeSpan.FromMilliseconds(500 * attempt), ct);
             }
+            catch
+            {
+                response?.Dispose(); response = null;
+                throw;
+            }
         }
     }
 
-    private static async Task<TransferResult> SingleAsync(HttpResponseMessage response, string path, Action<long, long> progress, string mediaType, CancellationToken ct)
+    private static async Task<TransferResult> SingleAsync(HttpClient http, Func<HttpRequestMessage> request, HttpResponseMessage response,
+        string path, Action<long, long> progress, string mediaType, Func<string, bool>? accept, CancellationToken ct)
     {
+        if (response.StatusCode == HttpStatusCode.PartialContent
+            && response.Content.Headers.ContentRange is { To: var end, Length: var full } && end < full - 1)
+        {
+            response.Dispose();
+            var plain = request();
+            plain.Headers.Range = null;
+            response = await SendAsync(http, plain, ct);
+            mediaType = response.Content.Headers.ContentType?.MediaType ?? mediaType;
+            if (accept is not null && !accept(mediaType)) { response.Dispose(); throw new IOException("Unexpected content"); }
+        }
         using (response)
         {
-            var total = response.Content.Headers.ContentRange?.Length ?? response.Content.Headers.ContentLength ?? 0;
-            await using var input = await response.Content.ReadAsStreamAsync(ct);
-            await using var output = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read, Buffer, true);
-            var buffer = new byte[Buffer]; long received = 0; var clock = Stopwatch.StartNew();
-            progress(0, total);
-            while (await input.ReadAsync(buffer, ct) is var read && read > 0)
+            var rented = ArrayPool<byte>.Shared.Rent(Buffer);
+            try
             {
-                await output.WriteAsync(buffer.AsMemory(0, read), ct); received += read;
-                if (clock.ElapsedMilliseconds >= 120) { progress(received, total); clock.Restart(); }
+                var total = response.Content.Headers.ContentRange?.Length ?? response.Content.Headers.ContentLength ?? 0;
+                await using var input = await response.Content.ReadAsStreamAsync(ct);
+                await using var output = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read, 4096, true);
+                long received = 0; var clock = Stopwatch.StartNew();
+                progress(0, total);
+                while (await input.ReadAsync(rented.AsMemory(0, Buffer), ct) is var read && read > 0)
+                {
+                    await output.WriteAsync(rented.AsMemory(0, read), ct); received += read;
+                    if (clock.ElapsedMilliseconds >= 120) { progress(received, total); clock.Restart(); }
+                }
+                if (total > 0 && received != total) throw new IOException("Truncated transfer");
+                progress(received, total);
+                return new TransferResult(received, mediaType, false);
             }
-            if (total > 0 && received != total) throw new IOException("Truncated transfer");
-            progress(received, total);
-            return new TransferResult(received, mediaType, false);
+            finally { ArrayPool<byte>.Shared.Return(rented); }
         }
     }
 

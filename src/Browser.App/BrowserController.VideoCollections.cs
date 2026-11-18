@@ -99,13 +99,25 @@ public sealed partial class BrowserController
         _videoJobs.Add(job);
         var downloadId = "v" + Guid.NewGuid().ToString("N");
         var operation = new DownloadOperation(job);
-        _downloads.Insert(0, (downloadId, operation, id));
+        var isPrivate = IsPrivateTab(id);
+        _downloads.Insert(0, (downloadId, operation, id, isPrivate));
         job.Changed += () => _window.DispatcherQueue.TryEnqueue(() =>
         {
             if (_closingWindow) return;
-            if (operation.State == Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.InProgress) _finishedAt.Remove(downloadId);
-            else if (!DownloadPending(downloadId, operation) && _finishedAt.TryAdd(downloadId, DateTime.UtcNow))
-                _ = Task.Delay(DockLinger).ContinueWith(_ => _window.DispatcherQueue.TryEnqueue(() => { if (!_closingWindow) UpdateDock(); }));
+            if (DownloadPending(downloadId, operation)) _finishedAt.Remove(downloadId);
+            else
+            {
+                if (operation.State == Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.Completed || _canceledDownloads.Contains(downloadId))
+                    _videoJobs.Remove(job);
+                if (_finishedAt.TryAdd(downloadId, DateTime.UtcNow))
+                {
+                    ReleaseClosedTabView(id);
+                    SaveDownloadHistory();
+                    if (!AppPaths.Private && isPrivate && !_tabs.Tabs.Any(t => t.Private)) { PurgeFinishedPrivateDownloads(); return; }
+                    var delay = Linger(operation);
+                    _ = Task.Delay(delay).ContinueWith(_ => _window.DispatcherQueue.TryEnqueue(() => { if (!_closingWindow) UpdateDock(); }));
+                }
+            }
             DownloadsChanged(throttle: operation.State == Microsoft.Web.WebView2.Core.CoreWebView2DownloadState.InProgress);
         });
         job.Start();

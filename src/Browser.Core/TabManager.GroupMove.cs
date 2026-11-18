@@ -8,14 +8,15 @@ public sealed partial class TabManager
         var first = _tabs.FindIndex(t => t.GroupId == id);
         if (first < 0 || index < 0 || index > _tabs.Count) return false;
         var members = _tabs.Where(t => t.GroupId == id).ToList();
-        var end = first + members.Count;
+        var last = _tabs.FindLastIndex(t => t.GroupId == id);
         index = Math.Max(PinnedCount, index);
-        if (index >= first && index <= end) return true;
-        if (index < _tabs.Count && _tabs[index].GroupId is { } target)
+        if (first + members.Count - 1 == last && index >= first && index <= last + 1) return true;
+        if (index < _tabs.Count && _tabs[index].GroupId is { } target && target != id)
             index = index > first ? _tabs.FindLastIndex(t => t.GroupId == target) + 1
                 : _tabs.FindIndex(t => t.GroupId == target);
-        _tabs.RemoveRange(first, members.Count);
-        _tabs.InsertRange(index > first ? index - members.Count : index, members);
+        var targetPos = _tabs.Take(index).Count(t => t.GroupId != id);
+        _tabs.RemoveAll(t => t.GroupId == id);
+        _tabs.InsertRange(targetPos, members);
         Changed?.Invoke();
         return true;
     }

@@ -26,6 +26,8 @@ public sealed partial class UiBridge
     private readonly Dictionary<string, (string Source, int Scroll, string Declared, string? Color, DateTime Settled, bool Moved)> _edges = new();
     private Task<string?>? _edgeRead;
 
+    public void ForgetTab(string id) => _edges.Remove(id);
+
     /// <returns>La couleur des bords, « rgb(r, g, b) », ou null si elle n'a pas pu être lue ou si les bords sont bigarrés.</returns>
     private async Task<string?> EdgeColorAsync(CoreWebView2 core, string id, string source, string declared, JsonElement probe)
     {
@@ -35,7 +37,8 @@ public sealed partial class UiBridge
         if (width < 50 || height < 50 || pages?.DeviceOf(id) is not null) return null;
         var scroll = (int)Math.Round(Number("sy") / 24);
         var now = DateTime.UtcNow;
-        if (!_edges.TryGetValue(id, out var known) || known.Source != source) known = (source, scroll, declared, null, now.AddSeconds(4), false);
+        var initial = !_edges.TryGetValue(id, out var known) || known.Source != source;
+        if (initial) known = (source, scroll, declared, null, now.AddMilliseconds(900), false);
         else if (known.Scroll != scroll)
         {
             // La page défile : pas de photo maintenant. Tant que sa couleur déclarée n'a pas changé, celle de ses
@@ -59,7 +62,8 @@ public sealed partial class UiBridge
         if (color is not null && known.Color is not null && Rgb(color) is { } now3 && Rgb(known.Color) is { } before3 && AmbientColor.Distance(now3, before3) <= 8)
             color = known.Color;
         if (_edges.Count > 80) _edges.Clear(); // onglets fermés depuis longtemps
-        _edges[id] = (source, scroll, declared, color, known.Settled, false);
+        // Une seule relecture après stabilisation suffit au lieu de quatre captures consécutives.
+        _edges[id] = (source, scroll, declared, color, initial ? known.Settled : DateTime.MinValue, false);
         return color;
     }
 
@@ -67,7 +71,7 @@ public sealed partial class UiBridge
     {
         try
         {
-            var json = await core.CallDevToolsProtocolMethodAsync("Page.captureScreenshot", """{"format":"jpeg","quality":92,"optimizeForSpeed":true}""");
+            var json = await core.CallDevToolsProtocolMethodAsync("Page.captureScreenshot", """{"format":"jpeg","quality":75,"optimizeForSpeed":true}""");
             using var doc = JsonDocument.Parse(json);
             using var stream = new InMemoryRandomAccessStream();
             using (var writer = new DataWriter(stream.GetOutputStreamAt(0)))

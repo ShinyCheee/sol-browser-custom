@@ -16,23 +16,23 @@ public sealed partial class MainWindow
             {
                 timer.Stop(); Save(); return;
             }
-            if (GetCursorPos(out var point) && ScreenToClient(_hwnd, ref point))
+            if (Win32Interop.GetCursorPos(out var point) && Win32Interop.ScreenToClient(_hwnd, ref point))
             {
                 var area = ContentArea.TransformToVisual(Root).TransformPoint(new Windows.Foundation.Point(0, 0));
                 chat.Resize(area.X + ContentArea.ActualWidth - point.X / Root.XamlRoot.RasterizationScale + 4);
             }
             // Appliquer aussi la dernière position au relâchement, même pour un geste très rapide.
-            var button = GetSystemMetrics(23 /* SM_SWAPBUTTON */) != 0 ? 0x02 : 0x01;
-            if ((GetAsyncKeyState(button) & 0x8000) == 0) { timer.Stop(); Save(); }
+            var button = Win32Interop.GetSystemMetrics(23 /* SM_SWAPBUTTON */) != 0 ? 0x02 : 0x01;
+            if ((Win32Interop.GetAsyncKeyState(button) & 0x8000) == 0) { timer.Stop(); Save(); }
         };
         long lastPress = 0;
         ChatGrip.PointerPressed += (_, e) =>
         {
             var properties = e.GetCurrentPoint(ChatGrip).Properties;
-            if (GetSystemMetrics(23) != 0 ? !properties.IsRightButtonPressed : !properties.IsLeftButtonPressed) return;
+            if (Win32Interop.GetSystemMetrics(23) != 0 ? !properties.IsRightButtonPressed : !properties.IsLeftButtonPressed) return;
             e.Handled = true;
             var now = Environment.TickCount64;
-            var doubleClick = now - lastPress <= GetDoubleClickTime();
+            var doubleClick = now - lastPress <= Win32Interop.GetDoubleClickTime();
             lastPress = doubleClick ? 0 : now;
             if (!doubleClick) { timer.Start(); return; }
             timer.Stop(); chat.Resize(ChatHost.DefaultWidth * settings.UiFactor); Save();

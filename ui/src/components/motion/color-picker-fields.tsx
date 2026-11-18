@@ -5,6 +5,7 @@ import { Pipette } from "lucide-react";
 import { arc, LayoutGroup, motion, type Transition, useAnimate, useReducedMotion } from "motion/react";
 import { type ComponentPropsWithRef, type ReactNode, useEffect, useState } from "react";
 import { SPRING_LAYOUT, SPRING_PRESS } from "@/lib/ease";
+import { t } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { CHECKERBOARD, clamp, formatHex, type Hsva, hslToHsv, hsvToHsl, parseHex, type Rgba, rgbaToHsva, usePickerContext } from "./color-picker-math";
 
@@ -22,7 +23,7 @@ function useRejectShake() {
 export interface ColorPickerHexInputProps extends Omit<ComponentPropsWithRef<"input">, "value" | "defaultValue" | "type"> {}
 
 export function ColorPickerHexInput({
-  className, onChange, onBlur, onKeyDown, "aria-label": ariaLabel = "Hex color", ...props
+  className, onChange, onBlur, onKeyDown, "aria-label": ariaLabel = t("Code de la couleur", "Hex color"), ...props
 }: ColorPickerHexInputProps) {
   const { hsva, hex, update, commit, disabled } = usePickerContext("ColorPickerHexInput");
   const [draft, setDraft] = useState<string | null>(null);
@@ -170,7 +171,7 @@ export function ColorPickerEyeDropper({
   className,
   children,
   onClick,
-  "aria-label": ariaLabel = "Pick a color from the screen",
+  "aria-label": ariaLabel = t("Pipette de couleur", "Pick a color from the screen"),
   ...props
 }: ColorPickerEyeDropperProps) {
   const { hsva, update, commit, disabled } = usePickerContext("ColorPickerEyeDropper");

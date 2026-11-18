@@ -103,7 +103,11 @@ export default function Start() {
   const visible = useFavoriteWindow(favoritesGrid, data.favorites.length, columns, allFavorites);
   const favorites = data.favorites.slice(visible.first, visible.last);
 
-  useLang();
+  const lang = useLang();
+  useEffect(() => {
+    document.title = t('Nouvel onglet', 'New tab');
+  }, [lang]);
+
   useEffect(() => {
     const off = onMessage(value => {
       const sent = value as { event?: string; url?: string; tint?: string; author?: string; page?: string };
@@ -262,6 +266,19 @@ export default function Start() {
           )}
         </section>
       </div>
+      {photo.url && (
+        <img
+          hidden
+          src={photo.url}
+          alt=""
+          onError={() => {
+            setPhoto({ url: '' });
+            document.body.style.backgroundImage = '';
+            document.body.style.backgroundColor = '';
+            delete document.documentElement.dataset.wallpaperPhoto;
+          }}
+        />
+      )}
       {data.wallpaper && photo.url && photo.author && (
         <button className="start-credit" title={photo.page} onClick={() => open(photo.page!)}>
           {t(`Photo : ${photo.author} · Unsplash`, `Photo: ${photo.author} · Unsplash`)}

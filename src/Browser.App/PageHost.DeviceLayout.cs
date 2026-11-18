@@ -51,7 +51,7 @@ public sealed partial class PageHost
             // La page s'affiche sous la barre d'état : décalée vers le bas de sa hauteur. Sous l'écran, la coque d'un
             // ordinateur continue (base, pied) : la marge du bas garde la page à la hauteur de l'écran.
             var foot = sim.Device.Foot * scale;
-            foreach (var (part, left, top, bottom) in new[] { (sim.Below, x, 0.0, 0.0), (sim.View, screenLeft, sim.Inset * scale, foot), (sim.Above, screenLeft, 0.0, foot) })
+            foreach (var (part, left, top, bottom) in new (FrameworkElement, double, double, double)[] { (sim.Below!, x, 0.0, 0.0), (sim.View, screenLeft, sim.Inset * scale, foot), (sim.Above!, screenLeft, 0.0, foot) })
             {
                 (part.HorizontalAlignment, part.VerticalAlignment, part.Margin) = (HorizontalAlignment.Left, VerticalAlignment.Center, new Thickness(left, top, 0, bottom));
                 Grid.SetColumn(part, Grid.GetColumn(main));

@@ -50,6 +50,7 @@ export async function sidebarHost(executable,{serve=null,downloads=false,capture
     const call = (method,params={})=>new Promise((resolve,reject)=>{const id=++seq;const timer=setTimeout(()=>{pending.delete(id);reject(new Error(`CDP timeout ${method}`));},10000);pending.set(id,{resolve,reject,timer});ws.send(JSON.stringify({id,method,params}));});
     const evaluate = async expression=> {const result=await call('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true,userGesture:true});if(result.exceptionDetails)throw new Error(JSON.stringify(result.exceptionDetails));return result.result.value;};
     const on=(method,listener)=>{const set=listeners.get(method)??new Set();set.add(listener);listeners.set(method,set);return()=>set.delete(listener)};
+    await wait(()=>evaluate('typeof document==="undefined"||!!document.body').catch(()=>false),`body ${hash}`,5000);
     return {call,evaluate,on,disconnect:async()=>{if(ws.readyState===WebSocket.CLOSED)return;const closed=once(ws,'close');ws.close();await closed;}};
   };
   const launch = async(height=950,width=1000,startupTimeout=30000)=> {

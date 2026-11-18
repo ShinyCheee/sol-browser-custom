@@ -14,7 +14,7 @@ namespace Browser.App;
 /// la suit tant qu'elle est ouverte ; elle se referme dès qu'on clique ailleurs.
 /// La vue partage le moteur et le profil des pages : l'extension y est chez elle.
 /// </summary>
-public sealed class ExtensionPopupHost(Window owner)
+public sealed class ExtensionPopupHost(Window owner, Action<string>? onShortcut = null)
 {
     private const double MinSize = 25, MaxWidth = 800, MaxHeight = 600;
     private const int Gap = 8; // distance gardée avec les bords de l'écran, en pixels
@@ -59,8 +59,8 @@ public sealed class ExtensionPopupHost(Window owner)
     {
         var run = ++_run;
         _inspecting = inspect;
-        var origin = new Point();
-        ClientToScreen(_owner, ref origin);
+        var origin = new Win32Interop.WinPoint();
+        Win32Interop.ClientToScreen(_owner, ref origin);
         _anchor = (origin.X + right * Scale, origin.Y + top * Scale);
         var window = _window ??= CreateWindow();
         CloseView();
@@ -73,6 +73,14 @@ public sealed class ExtensionPopupHost(Window owner)
             FocusVisualPrimaryThickness = new Thickness(0),
             FocusVisualSecondaryThickness = new Thickness(0),
         };
+        view.AddHandler(UIElement.KeyDownEvent, new Microsoft.UI.Xaml.Input.KeyEventHandler((_, e) =>
+        {
+            if (e.Key == Windows.System.VirtualKey.Escape) { e.Handled = true; Hide(); return; }
+            var mods = (Win32Interop.GetAsyncKeyState(0x11) < 0 ? 2u : 0u) | (Win32Interop.GetAsyncKeyState(0x12) < 0 ? 1u : 0u) | (Win32Interop.GetAsyncKeyState(0x10) < 0 ? 4u : 0u);
+            if (mods == 2 && (uint)e.Key is 0x41 or 0x43 or 0x56 or 0x58 or 0x59 or 0x5A) return;
+            if (onShortcut is not null && BrowserShortcuts.All.FirstOrDefault(s => s.Modifiers == mods && s.Key == (uint)e.Key) is { } match)
+            { e.Handled = true; Hide(); onShortcut(match.Action); }
+        }), true);
         window.Content = view;
         Place(panel ? 380 : 320, panel ? 600 : 200);
         window.AppWindow.Show(activateWindow: false); // une vue ne démarre son moteur qu'une fois affichée
@@ -120,15 +128,15 @@ public sealed class ExtensionPopupHost(Window owner)
         }
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
         // WinUI conserve parfois WS_DLGFRAME même sans barre de titre : ce cadre ajoute 3 px blancs par côté.
-        SetWindowLong(hwnd, -16, GetWindowLong(hwnd, -16) & ~0x00C40000); // WS_CAPTION | WS_THICKFRAME
-        SetWindowPos(hwnd, 0, 0, 0, 0, 0, 0x0037); // recalcul du cadre, sans déplacement, taille ni activation
+        Win32Interop.SetWindowLong(hwnd, -16, Win32Interop.GetWindowLong(hwnd, -16) & ~0x00C40000); // WS_CAPTION | WS_THICKFRAME
+        Win32Interop.SetWindowPos(hwnd, 0, 0, 0, 0, 0, 0x0037); // recalcul du cadre, sans déplacement, taille ni activation
         // Fenêtre du navigateur pour propriétaire : elle reste au-dessus de lui, sans entrée dans la barre des tâches.
-        if (nint.Size == 8) SetWindowLongPtr(hwnd, -8, _owner); else SetWindowLong(hwnd, -8, (int)_owner);
+        if (nint.Size == 8) Win32Interop.SetWindowLongPtr(hwnd, -8, _owner); else Win32Interop.SetWindowLong(hwnd, -8, (int)_owner);
         var rounded = 2; // coins et ombre du système (Windows 11) ; sans effet avant
-        var applied = DwmSetWindowAttribute(hwnd, 33, ref rounded, sizeof(int));
+        var applied = Win32Interop.DwmSetWindowAttribute(hwnd, 33, ref rounded, sizeof(int));
         if (applied != 0) DebugLog.Write($"fenêtre d'extension : coins du système refusés (0x{applied:X8})");
         var noBorder = unchecked((int)0xFFFFFFFE); // DWMWA_COLOR_NONE : coins et ombre natifs, sans contour blanc.
-        applied = DwmSetWindowAttribute(hwnd, 34, ref noBorder, sizeof(int)); // DWMWA_BORDER_COLOR (Windows 11)
+        applied = Win32Interop.DwmSetWindowAttribute(hwnd, 34, ref noBorder, sizeof(int)); // DWMWA_BORDER_COLOR (Windows 11)
         if (applied != 0) DebugLog.Write($"fenêtre d'extension : suppression du contour refusée (0x{applied:X8})");
         window.Activated += (_, e) => { if (e.WindowActivationState == WindowActivationState.Deactivated && !_inspecting) Hide(); }; // clic ailleurs
         app.Closing += (_, e) => { if (!_ownerClosed) { e.Cancel = true; Hide(); } }; // Alt+F4 : elle se cache, elle resservira
@@ -191,12 +199,4 @@ public sealed class ExtensionPopupHost(Window owner)
         _window?.AppWindow.Hide();
         CloseView(); // la page de l'extension est déchargée, et sa vue quitte la liste des onglets du moteur
     }
-
-    [StructLayout(LayoutKind.Sequential)] private struct Point { public int X, Y; }
-    [DllImport("user32.dll")] private static extern bool ClientToScreen(nint hwnd, ref Point point);
-    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")] private static extern nint SetWindowLongPtr(nint hwnd, int index, nint value);
-    [DllImport("user32.dll", EntryPoint = "SetWindowLongW")] private static extern int SetWindowLong(nint hwnd, int index, int value);
-    [DllImport("user32.dll", EntryPoint = "GetWindowLongW")] private static extern int GetWindowLong(nint hwnd, int index);
-    [DllImport("user32.dll")] private static extern bool SetWindowPos(nint hwnd, nint after, int x, int y, int width, int height, uint flags);
-    [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref int value, int size);
 }

@@ -80,7 +80,7 @@ public sealed partial class BrowserController
         attachments=_noteDraft.Files.Select(id=>_noteFiles.Find(id)).OfType<NoteFile>().Select(f=>new { f.Id,f.Name,f.Mime,size=f.Data.Length,
             data=f.Mime.StartsWith("image/")||f.Mime.StartsWith("audio/")?"data:"+f.Mime+";base64,"+Convert.ToBase64String(f.Data):null }) },
         new JsonSerializerOptions {PropertyNamingPolicy=JsonNamingPolicy.CamelCase});
-    private void OpenNotes(double x,double y) {HidePopup();_notesPopup=true;_popup.ShowCentered(480,NotesJson());}
+    private void OpenNotes() { HidePopup(); _notesPopup = true; _popup.ShowCentered(480, NotesJson()); }
     private void PublishNotes()
     {
         var json=NotesJson();if(_notesPopup)_popup.Post(json);

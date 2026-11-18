@@ -87,6 +87,24 @@ public sealed partial class PageHost
             if (!settings.MemorySaver || !_hiddenSince.ContainsKey(id) || KeepAwake(id)
                 || _pip == id || _sims.ContainsKey(id) || _loading.Contains(id) || core.IsDocumentPlayingAudio) Wake(id, core);
         }
+        catch (Exception error) when (error is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
+        finally { _saving.Remove(core); }
+    }
+
+    private async Task RestCoreAsync(string id, CoreWebView2 core)
+    {
+        try
+        {
+            core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Normal;
+            if (await core.TrySuspendAsync()) DebugLog.Write($"memory.suspend {id} True");
+            else
+            {
+                // Le moteur peut garder une activité vivante : réduire la mémoire sans bloquer ses scripts.
+                core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low;
+                _suspendRefused.Add(id);
+                DebugLog.Write($"memory.low {id}");
+            }
+        }
         catch (Exception error) when (error is InvalidOperationException or System.Runtime.InteropServices.COMException)
         {
             if (Core(id) == core && _hiddenSince.ContainsKey(id))
@@ -95,20 +113,6 @@ public sealed partial class PageHost
                 catch (Exception closed) when (closed is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
             }
             DebugLog.Write($"memory.suspend.failed {id} {error.HResult}");
-        }
-        finally { _saving.Remove(core); }
-    }
-
-    private async Task RestCoreAsync(string id, CoreWebView2 core)
-    {
-        core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Normal;
-        if (await core.TrySuspendAsync()) DebugLog.Write($"memory.suspend {id} True");
-        else
-        {
-            // Le moteur peut garder une activité vivante : réduire la mémoire sans bloquer ses scripts.
-            core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low;
-            _suspendRefused.Add(id);
-            DebugLog.Write($"memory.low {id}");
         }
     }
 

@@ -160,7 +160,7 @@ public sealed partial class PageHost
         var s = core.Settings;
         s.AreHostObjectsAllowed = false;
         await core.AddScriptToExecuteOnDocumentCreatedAsync(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "inject", "web-host-compat.js")));
-        NativeDownloadUi.Suppress(core, () => NativeDownloadsRequested?.Invoke(), disableAccelerators: false);
+        NativeDownloadUi.Suppress(core, disableAccelerators: false);
         var downloadSignal = System.Text.Json.JsonSerializer.Serialize("sol.downloads:" + FanKey);
         await core.AddScriptToExecuteOnDocumentCreatedAsync("(() => { const post=chrome.webview.postMessage.bind(chrome.webview); addEventListener('keydown',e=>{if(e.isTrusted&&e.ctrlKey&&!e.altKey&&!e.shiftKey&&e.code==='KeyJ'){e.preventDefault();e.stopImmediatePropagation();post(" + downloadSignal + ");}},true); })()");
         core.WebMessageReceived += (_, e) => { if (e.Source == core.Source && e.WebMessageAsJson == downloadSignal) NativeDownloadsRequested?.Invoke(); };
@@ -186,7 +186,20 @@ public sealed partial class PageHost
         {
             e.Action = CoreWebView2ServerCertificateErrorAction.Cancel;
         };
-        core.ContainsFullScreenElementChanged += (_, _) => FullScreenChanged?.Invoke(core.ContainsFullScreenElement);
+        core.ContainsFullScreenElementChanged += (_, _) =>
+        {
+            var owner = _views.FirstOrDefault(v => v.Value.CoreWebView2 == core).Key;
+            if (core.ContainsFullScreenElement && owner is not null && _visible.Contains(owner))
+            {
+                _fullScreenTab = owner;
+                FullScreenChanged?.Invoke(true);
+            }
+            else if (!core.ContainsFullScreenElement && (owner is null || _fullScreenTab == owner))
+            {
+                _fullScreenTab = null;
+                FullScreenChanged?.Invoke(false);
+            }
+        };
         // Accès sensibles (micro, caméra, position, notifications…) : jamais accordés d'office, le navigateur
         // demande à l'utilisateur. Sans personne pour répondre, la demande est refusée.
         core.PermissionRequested += (_, e) =>

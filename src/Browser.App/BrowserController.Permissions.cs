@@ -89,7 +89,22 @@ public sealed partial class BrowserController
             request.Args.State = CoreWebView2PermissionState.Deny;
             DebugLog.Write("permission.save.failed " + error.GetType().Name);
         }
-        finally { request.Deferral.Complete(); _window.DispatcherQueue.TryEnqueue(ShowNextPermission); }
+        finally { request.Deferral.Complete(); UpdateMediaShortcutState(); _window.DispatcherQueue.TryEnqueue(ShowNextPermission); }
+    }
+
+    private void UpdateMediaShortcutState()
+    {
+        var usesMedia = false;
+        if (_tabs.ActiveId is { } id && _tabs.Tabs.FirstOrDefault(t => t.Id == id) is { } tab
+            && _pages.CoreOf(id) is { } core && PermissionStore.OriginOf(core.Source) is { } origin)
+        {
+            var store = tab.Private || AppPaths.Private ? _privatePermissions : PermissionFor(tab.SessionId);
+            usesMedia = store.Get(origin, nameof(CoreWebView2PermissionKind.Microphone)) == true
+                || store.Get(origin, nameof(CoreWebView2PermissionKind.Camera)) == true;
+        }
+        if (_activeUsesMedia == usesMedia) return;
+        _activeUsesMedia = usesMedia;
+        ShortcutsChanged?.Invoke();
     }
 
     private static void RefusePermission(PermissionRequest request)
@@ -113,6 +128,7 @@ public sealed partial class BrowserController
         {
             if (!(origin is null ? _permissions.Clear() : _permissions.Forget(origin))) throw new IOException("Permission reset could not be saved");
             await NativePermissions.ResetAsync(profile, origin);
+            UpdateMediaShortcutState();
             if (_settingsOpen) _popup.Post(SettingsJson());
         }
         catch (Exception error) when (error is IOException or InvalidOperationException or System.Runtime.InteropServices.COMException)

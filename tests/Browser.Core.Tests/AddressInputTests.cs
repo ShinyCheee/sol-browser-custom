@@ -32,4 +32,16 @@ public class AddressInputTests
     [InlineData("what is a.b", "https://www.google.com/search?q=what%20is%20a.b")]
     public void Resolves(string input, string expected) =>
         Assert.Equal(expected, AddressInput.Resolve(input, Search));
+
+    [Fact]
+    public void Custom_or_malformed_search_templates_never_throw_format_exceptions()
+    {
+        Assert.Equal("https://search.example/?q=bonjour&extra={1}",
+            AddressInput.Resolve("bonjour", "https://search.example/?q={0}&extra={1}"));
+        Assert.Equal("https://www.google.com/search?q=bonjour",
+            AddressInput.Resolve("bonjour", "javascript:alert({0})"));
+        var settings = new Settings { SearchUrlTemplate = "javascript:alert({0})", SuggestUrlTemplate = "https://suggest.example/?q={0}&bad={1}" };
+        Assert.Equal(AddressInput.DefaultSearchUrlTemplate, settings.SearchUrlTemplate);
+        Assert.Equal(Settings.DefaultSuggestUrlTemplate, settings.SuggestUrlTemplate);
+    }
 }

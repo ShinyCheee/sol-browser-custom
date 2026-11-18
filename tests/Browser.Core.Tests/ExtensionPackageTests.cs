@@ -154,4 +154,110 @@ public class ExtensionPackageTests
                 if (Directory.Exists(folder)) Directory.Delete(folder, true);
         }
     }
+
+    [Fact]
+    public void Zip_bomb_with_forged_entry_length_and_malformed_crx_headers_are_rejected_as_invalid_data()
+    {
+        using var key = RSA.Create(2048);
+        var publicKey = key.ExportSubjectPublicKeyInfo();
+        var digest = SHA256.HashData(publicKey)[..16];
+        var id = string.Concat(digest.SelectMany(b => new[] { (char)('a' + (b >> 4)), (char)('a' + (b & 15)) }));
+        byte[] Field(int tag, byte[] data)
+        {
+            using var result = new MemoryStream();
+            void Varint(uint value) { while (value >= 128) { result.WriteByte((byte)(value | 128)); value >>= 7; } result.WriteByte((byte)value); }
+            Varint((uint)((tag << 3) | 2)); Varint((uint)data.Length); result.Write(data);
+            return result.ToArray();
+        }
+        using var archive = new MemoryStream();
+        using (var zip = new ZipArchive(archive, ZipArchiveMode.Create, true))
+        {
+            using (var w = new StreamWriter(zip.CreateEntry("manifest.json").Open()))
+                w.Write("{\"manifest_version\":3,\"name\":\"Bomb\",\"version\":\"1.0\"}");
+            using var bomb = zip.CreateEntry("bomb.bin", CompressionLevel.Fastest).Open();
+            bomb.Write(new byte[512 * 1024]); // 512 Kio réels compressés en ~600 octets
+        }
+        var rawZip = archive.ToArray();
+        // Forge un extra field ZIP64 (0x0001) annonçant uncompressedSize = -1 afin que entry.Length == -1 contourne
+        // un simple filtre entry.Length > MaxEntryBytes tout en laissant DeflateStream décompresser les 512 Kio réels.
+        var zipBytes = ForgeZip64NegativeLength(rawZip, "bomb.bin");
+        using (var check = new ZipArchive(new MemoryStream(zipBytes), ZipArchiveMode.Read))
+            Assert.Equal(-1L, check.GetEntry("bomb.bin")!.Length);
+
+        var signed = Field(1, digest);
+        var payload = "CRX3 SignedData\0"u8.ToArray().Concat(BitConverter.GetBytes(signed.Length)).Concat(signed).Concat(zipBytes).ToArray();
+        var signature = key.SignData(payload, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        var proof = Field(1, publicKey).Concat(Field(2, signature)).ToArray();
+        var header = Field(2, proof).Concat(Field(10000, signed)).ToArray();
+        var crx = "Cr24"u8.ToArray().Concat(BitConverter.GetBytes(3)).Concat(BitConverter.GetBytes(header.Length)).Concat(header).Concat(zipBytes).ToArray();
+
+        var dir = Path.Combine(Path.GetTempPath(), "sol-bomb-" + Guid.NewGuid());
+        try
+        {
+            using var stream = new MemoryStream(crx, writable: false);
+            var bombEx = Assert.Throws<InvalidDataException>(() => ExtensionPackage.Extract(stream, id, dir, maxEntryBytes: 64 * 1024, maxTotalBytes: 128 * 1024));
+            Assert.Contains("volumineuse", bombEx.Message);
+            Assert.False(File.Exists(Path.Combine(dir, "bomb.bin")));
+
+            // Champs protobuf signés dupliqués -> InvalidDataException (pas InvalidOperationException).
+            var duplicateHeader = Field(2, proof).Concat(Field(10000, signed)).Concat(Field(10000, signed)).ToArray();
+            var malformedCrx = "Cr24"u8.ToArray().Concat(BitConverter.GetBytes(3)).Concat(BitConverter.GetBytes(duplicateHeader.Length)).Concat(duplicateHeader).Concat(rawZip).ToArray();
+            Assert.Throws<InvalidDataException>(() => ExtensionPackage.Extract(malformedCrx, id, dir + "-dup"));
+        }
+        finally
+        {
+            foreach (var d in new[] { dir, dir + "-dup" }) if (Directory.Exists(d)) Directory.Delete(d, true);
+        }
+    }
+
+    private static byte[] ForgeZip64NegativeLength(byte[] zipBytes, string entryName)
+    {
+        var nameBytes = Encoding.ASCII.GetBytes(entryName);
+        byte[] extra = [0x01, 0x00, 0x08, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
+        for (var i = 0; i <= zipBytes.Length - 46 - nameBytes.Length; i++)
+        {
+            if (System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(zipBytes.AsSpan(i, 4)) != 0x02014b50) continue;
+            var fnLen = System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(zipBytes.AsSpan(i + 28, 2));
+            if (fnLen != nameBytes.Length || !zipBytes.AsSpan(i + 46, fnLen).SequenceEqual(nameBytes)) continue;
+            var oldExtraLen = System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(zipBytes.AsSpan(i + 30, 2));
+            var forged = new byte[zipBytes.Length + extra.Length];
+            var insertAt = i + 46 + fnLen + oldExtraLen;
+            zipBytes.AsSpan(0, insertAt).CopyTo(forged);
+            extra.CopyTo(forged.AsSpan(insertAt));
+            zipBytes.AsSpan(insertAt).CopyTo(forged.AsSpan(insertAt + extra.Length));
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(forged.AsSpan(i + 24, 4), 0xFFFFFFFF);
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(forged.AsSpan(i + 30, 2), (ushort)(oldExtraLen + extra.Length));
+            var eocd = forged.Length - 22;
+            var cdSize = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(forged.AsSpan(eocd + 12, 4));
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(forged.AsSpan(eocd + 12, 4), (uint)(cdSize + extra.Length));
+            return forged;
+        }
+        throw new InvalidOperationException("Entry not found");
+    }
+
+    [Fact]
+    public void Malicious_default_locale_cannot_escape_locales_directory_and_lenient_json_is_supported()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "sol-locale-" + Guid.NewGuid());
+        var ext = Path.Combine(root, "sub", "ext");
+        Directory.CreateDirectory(Path.Combine(ext, "_locales", "en"));
+        try
+        {
+            // Fichier messages.json piégé hors de _locales que "../../" tenterait de lire.
+            File.WriteAllText(Path.Combine(root, "messages.json"), """{ "appName": { "message": "FUITE EXTERNE" } }""");
+            File.WriteAllText(Path.Combine(ext, "_locales", "en", "messages.json"), """
+                // commentaire accepté
+                { "appName": { "message": "Nom Sûr", }, }
+                """);
+            File.WriteAllText(Path.Combine(ext, "manifest.json"), """
+                { "manifest_version": 3, "name": "__MSG_appName__", "version": "1.0", "default_locale": "../../", "icons": { "16": "icon.png", }, }
+                """);
+            File.WriteAllBytes(Path.Combine(ext, "icon.png"), [137, 80, 78, 71, 13, 10, 26, 10]);
+
+            var info = ExtensionCatalog.Read(ext, "eimadpbcbfnmbkopoojfekhnkhdbieeh")!;
+            Assert.Equal("Nom Sûr", info.Name);
+            Assert.StartsWith("data:image/png;base64,", ExtensionCatalog.Icon(ext));
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
 }

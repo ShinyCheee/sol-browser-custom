@@ -39,7 +39,7 @@ public sealed partial class BrowserController
         }
     }
 
-    private string DownloadsJson(IEnumerable<(string Id, DownloadOperation Op, string TabId)> downloads) => JsonSerializer.Serialize(new
+    private string DownloadsJson(IEnumerable<(string Id, DownloadOperation Op, string TabId, bool IsPrivate)> downloads) => JsonSerializer.Serialize(new
     {
         popup = "downloads",
         items = downloads.Select(d => new
@@ -89,7 +89,7 @@ public sealed partial class BrowserController
             if (!PermissionFor(session).Forget(origin) || !await _pages.ResetSiteAsync(id, origin))
                 if (!_closingWindow) Notice(T("Effacement incomplet", "Incomplete clearing"), T("Certaines données n’ont pas pu être effacées. Réessayez sur ce site.", "Some data could not be cleared. Retry on this site."));
         }
-        finally { _resettingSite = false; }
+        finally { _resettingSite = false; UpdateMediaShortcutState(); }
     }
     private async Task ClearSiteDataAsync()
     {

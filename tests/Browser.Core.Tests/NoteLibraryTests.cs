@@ -102,4 +102,28 @@ public class NoteLibraryTests : IDisposable
         foreach(var format in new[]{"json","csv"}){var parsed=NoteTransfer.Parse(NoteTransfer.Export(notes.Items,format),"notes."+format);Assert.NotNull(parsed);Assert.Empty(Assert.Single(parsed).Text);}
         Assert.False(notes.Import([null!]));Assert.True(notes.RestoreRevision(id,0));Assert.Equal("Contenu",notes.Items[0].Text);
     }
+
+    [Fact] public void Attachments_load_lazily_store_binaries_on_disk_and_migrate_legacy_inline_json()
+    {
+        var assetsPath = Path.Combine(_dir, "notes-assets.json");
+        var legacyId = "0123456789abcdef0123456789abcdef";
+        byte[] png = [137, 80, 78, 71, 13, 10, 26, 10, 42];
+        File.WriteAllText(assetsPath, JsonSerializer.Serialize(new[] { new NoteFile(legacyId, "old.png", "image/png", png) }));
+
+        // Verrou exclusif pendant l'instanciation : prouve que 0 octet est lu au démarrage tant qu'on n'accède pas aux notes.
+        NoteFiles lazy;
+        using (var exclusive = new FileStream(assetsPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            lazy = new NoteFiles(assetsPath);
+
+        var migrated = lazy.Find(legacyId)!;
+        Assert.Equal(png, migrated.Data);
+        Assert.True(File.Exists(Path.Combine(_dir, "notes-assets", legacyId + ".bin")));
+        Assert.DoesNotContain(Convert.ToBase64String(png), File.ReadAllText(assetsPath));
+
+        var added = lazy.Add("fresh.pdf", "%PDF-1.4"u8.ToArray())!;
+        Assert.True(File.Exists(Path.Combine(_dir, "notes-assets", added.Id + ".bin")));
+        Assert.DoesNotContain("JVBERi", File.ReadAllText(assetsPath));
+        Assert.Equal("%PDF-1.4"u8.ToArray(), new NoteFiles(assetsPath).Find(added.Id)!.Data);
+        Assert.Contains("notes-assets", Backup.ProfileFolders);
+    }
 }

@@ -22,11 +22,7 @@ public sealed partial class BrowserController
                 if (IsWeb(url) && _tabs.ActiveId == tabId) { Split(Open(url, activate: false).Id); Refresh(); }
                 return true;
             case "start.copy":
-                if (IsWeb(url))
-                {
-                    var data = new Windows.ApplicationModel.DataTransfer.DataPackage(); data.SetText(url);
-                    Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(data);
-                }
+                if (IsWeb(url)) Copy(url);
                 return true;
             case "start.topic": OpenTopicGroup(command.Title ?? ""); return true;
             case "start.groupedit": Execute(new Command("group.edit", Id: command.Id)); return true;

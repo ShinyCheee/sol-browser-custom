@@ -1,51 +1,116 @@
+import { useEffect, useRef, useState } from 'react';
+import { Button } from '@/components/motion/button/base';
 import { send } from './bridge';
 import { t } from './i18n';
 import { Icon } from './Icons';
-import {Button} from '@/components/motion/button/base';
 import './downloads.css';
 
-export type Download = { id: string; name: string; received: number; total: number | null; state: 'InProgress' | 'Interrupted' | 'Completed';paused?:boolean;canceled?:boolean;canResume?:boolean;canRetry?:boolean;reason?:string;phase?:string };
+export type Download = {
+  id: string;
+  name: string;
+  received: number;
+  total: number | null;
+  state: 'InProgress' | 'Interrupted' | 'Completed';
+  paused?: boolean;
+  canceled?: boolean;
+  canResume?: boolean;
+  canRetry?: boolean;
+  reason?: string;
+  phase?: string;
+};
 
 const size = (bytes: number) =>
-  bytes < 1024 * 1024 ? `${Math.max(0, Math.round(bytes / 1024))} ${t('Ko', 'KB')}` : `${(bytes / 1024 / 1024).toFixed(1)} ${t('Mo', 'MB')}`;
+  bytes < 1024 * 1024
+    ? `${Math.max(0, Math.round(bytes / 1024))} ${t('Ko', 'KB')}`
+    : `${(bytes / 1024 / 1024).toFixed(1)} ${t('Mo', 'MB')}`;
 
-export const percent = (d: Download) => (d.total && d.total > 0 ? Math.max(0,Math.min(100,Math.round((d.received / d.total) * 100))) : null);
-export const pendingDownload=(d:Download)=>!d.canceled&&(d.state==='InProgress'||d.paused||d.canResume);
+export const percent = (d: Download) =>
+  d.total && d.total > 0 ? Math.max(0, Math.min(100, Math.round((d.received / d.total) * 100))) : null;
 
-function status(d: Download) {
+export const pendingDownload = (d: Download) =>
+  !d.canceled && (d.state === 'InProgress' || d.paused || d.canResume);
+
+function discreteStatus(d: Download): string | null {
   if (d.state === 'Completed') return `${t('Terminé', 'Done')} · ${size(d.received)}`;
-  if(d.canceled)return t('Annulé','Canceled');
-  if(d.paused)return `${t('En pause','Paused')} · ${size(d.received)}${d.total?` / ${size(d.total)}`:''}`;
-  if(d.phase==='queued')return t('En attente · deux fichiers à la fois','Queued · two files at a time');
-  if(d.phase && !d.paused && !d.canceled) {
-    const phases:Record<string,string>={'engine.downloader':t('Préparation du moteur…','Preparing download engine…'),'engine.ffmpeg':t('Préparation de la conversion…','Preparing media conversion…'),merge:t('Assemblage des pistes…','Merging tracks…'),encode:t('Conversion de la piste audio…','Converting audio track…'),audioMissing:t('Cette source ne contient pas de piste audio','This source contains no audio track'),audioUnsupported:t('La conversion audio nécessite Windows 64 bits','Audio conversion requires 64-bit Windows'),protected:t('Vidéo protégée : téléchargement indisponible','Protected video: download unavailable'),auth:t('Accès au site refusé ou connexion nécessaire','Site denied access or sign-in required'),failed:t('Échec du téléchargement — réessayez ou choisissez une autre source','Download failed — retry or choose another source')};
-    if(phases[d.phase])return phases[d.phase];
+  if (d.canceled) return t('Annulé', 'Canceled');
+  if (d.paused) return `${t('En pause', 'Paused')} · ${size(d.received)}${d.total ? ` / ${size(d.total)}` : ''}`;
+  if (d.phase === 'queued') return t('En attente · deux fichiers à la fois', 'Queued · two files at a time');
+  if (d.phase && !d.paused && !d.canceled) {
+    const phases: Record<string, string> = {
+      'engine.downloader': t('Préparation du moteur…', 'Preparing download engine…'),
+      'engine.ffmpeg': t('Préparation de la conversion…', 'Preparing media conversion…'),
+      merge: t('Assemblage des pistes…', 'Merging tracks…'),
+      encode: t('Conversion de la piste audio…', 'Converting audio track…'),
+      audioMissing: t('Cette source ne contient pas de piste audio', 'This source contains no audio track'),
+      audioUnsupported: t('La conversion audio nécessite Windows 64 bits', 'Audio conversion requires 64-bit Windows'),
+      protected: t('Vidéo protégée : téléchargement indisponible', 'Protected video: download unavailable'),
+      auth: t('Accès au site refusé ou connexion nécessaire', 'Site denied access or sign-in required'),
+      failed: t(
+        'Échec du téléchargement — réessayez ou choisissez une autre source',
+        'Download failed — retry or choose another source',
+      ),
+    };
+    if (phases[d.phase]) return phases[d.phase];
   }
   if (d.state === 'Interrupted') {
-    const reasons:Record<string,string>={NetworkDisconnected:t('Connexion interrompue','Connection interrupted'),NetworkFailed:t('Erreur réseau','Network error'),NetworkTimeout:t('Délai réseau dépassé','Network timeout'),FileNoSpace:t('Espace disque insuffisant','Not enough disk space'),FileAccessDenied:t('Accès au fichier refusé','File access denied'),ServerForbidden:t('Accès refusé par le serveur','Server denied access'),ServerUnauthorized:t('Connexion au site nécessaire','Sign-in required'),UserShutdown:t('Onglet ou navigateur fermé','Tab or browser closed')};
-    return reasons[d.reason??'']||t('Interrompu','Interrupted');
+    const reasons: Record<string, string> = {
+      NetworkDisconnected: t('Connexion interrompue', 'Connection interrupted'),
+      NetworkFailed: t('Erreur réseau', 'Network error'),
+      NetworkTimeout: t('Délai réseau dépassé', 'Network timeout'),
+      FileNoSpace: t('Espace disque insuffisant', 'Not enough disk space'),
+      FileAccessDenied: t('Accès au fichier refusé', 'File access denied'),
+      ServerForbidden: t('Accès refusé par le serveur', 'Server denied access'),
+      ServerUnauthorized: t('Connexion au site nécessaire', 'Sign-in required'),
+      UserShutdown: t('Onglet ou navigateur fermé', 'Tab or browser closed'),
+    };
+    return reasons[d.reason ?? ''] || t('Interrompu', 'Interrupted');
   }
-  const parts=[d.total ? `${percent(d)} % · ${size(d.total)}` : size(d.received)];
-  // Vitesse seulement : les connexions parallèles d'un téléchargement accéléré restent en coulisses.
-  const rate=speed(d);if(rate)parts.push(`${size(rate)}/s`);
+  return null;
+}
+
+function statusText(d: Download, rate: number): string {
+  const discrete = discreteStatus(d);
+  if (discrete) return discrete;
+  const parts = [d.total ? `${percent(d)} % · ${size(d.total)}` : size(d.received)];
+  if (rate > 0) parts.push(`${size(rate)}/s`);
   return parts.join(' · ');
 }
 
-// Vitesse lissée de chaque téléchargement, à partir des mises à jour successives (quatre par seconde au plus).
-const samples=new Map<string,{at:number;bytes:number;rate:number}>();
-function speed(d: Download) {
-  const now=performance.now(),last=samples.get(d.id);
-  if(!last||d.received<last.bytes){samples.set(d.id,{at:now,bytes:d.received,rate:0});return 0;}
-  const elapsed=(now-last.at)/1000;
-  if(elapsed<0.2)return last.rate;
-  const instant=(d.received-last.bytes)/elapsed,rate=last.rate?last.rate*0.6+instant*0.4:instant;
-  samples.set(d.id,{at:now,bytes:d.received,rate});
+function useSmoothedSpeed(d: Download): number {
+  const sampleRef = useRef<{ id: string; at: number; bytes: number; rate: number } | null>(null);
+  const [rate, setRate] = useState(0);
+
+  useEffect(() => {
+    if (d.state !== 'InProgress' || d.paused || d.canceled) {
+      sampleRef.current = null;
+      setRate(0);
+      return;
+    }
+    const now = performance.now();
+    const last = sampleRef.current;
+    if (!last || last.id !== d.id || d.received < last.bytes) {
+      sampleRef.current = { id: d.id, at: now, bytes: d.received, rate: 0 };
+      setRate(0);
+      return;
+    }
+    const elapsed = (now - last.at) / 1000;
+    if (elapsed < 0.2) return;
+    const instant = (d.received - last.bytes) / elapsed;
+    const nextRate = last.rate ? last.rate * 0.6 + instant * 0.4 : instant;
+    sampleRef.current = { id: d.id, at: now, bytes: d.received, rate: nextRate };
+    setRate(nextRate);
+  }, [d.id, d.received, d.state, d.paused, d.canceled]);
+
   return rate;
 }
 
 // Carte d'un téléchargement : partagée par le panneau de la barre et l'encart en bas à droite.
 export function DownloadCard({ d }: { d: Download }) {
   const pct = percent(d);
+  const rate = useSmoothedSpeed(d);
+  const discrete = discreteStatus(d);
+  const resumable = d.paused || d.state === 'Interrupted';
+
   return (
     <div className="download-card">
       <div className="download-top">
@@ -53,33 +118,115 @@ export function DownloadCard({ d }: { d: Download }) {
           <Icon d="M8 2.5v7.5M5 7l3 3 3-3M3.5 13h9" size={13} />
         </span>
         <div className="download-text">
-          <span className="row-title" title={d.name}>{d.name}</span>
-          <span className="row-sub" aria-live="polite">{status(d)}</span>
+          <span className="row-title" title={d.name}>
+            {d.name}
+          </span>
+          <span className="row-sub">{statusText(d, rate)}</span>
+          <span className="sr-only" aria-live="polite">
+            {discrete ? `${d.name} · ${discrete}` : ''}
+          </span>
         </div>
         <div className="download-actions">
-          {pendingDownload(d) && <>
-            <Button variant="ghost" size="sm" whileHover={undefined} pressScale={0.98} className="pill-action" disabled={(d.paused||d.state==='Interrupted')&&!d.canResume} aria-label={d.paused||d.state==='Interrupted'?t(`Reprendre ${d.name}`,`Resume ${d.name}`):t(`Mettre en pause ${d.name}`,`Pause ${d.name}`)} onClick={()=>send({type:d.paused||d.state==='Interrupted'?'download.resume':'download.pause',id:d.id})}><Icon name={d.paused||d.state==='Interrupted'?'play':'pause'} size={14}/>{d.paused||d.state==='Interrupted'?t('Reprendre','Resume'):t('Pause','Pause')}</Button>
-            <Button variant="ghost" size="sm" whileHover={undefined} pressScale={0.98} className="pill-action" aria-label={t(`Annuler ${d.name}`,`Cancel ${d.name}`)} onClick={() => send({ type: 'download.cancel', id: d.id })}>
-              <Icon name="close" size={14}/>{t('Annuler', 'Cancel')}
+          {pendingDownload(d) && (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                whileHover={undefined}
+                pressScale={0.98}
+                className="pill-action"
+                disabled={resumable && !d.canResume}
+                aria-label={
+                  resumable
+                    ? t(`Reprendre ${d.name}`, `Resume ${d.name}`)
+                    : t(`Mettre en pause ${d.name}`, `Pause ${d.name}`)
+                }
+                onClick={() => send({ type: resumable ? 'download.resume' : 'download.pause', id: d.id })}
+              >
+                <Icon name={resumable ? 'play' : 'pause'} size={14} />
+                {resumable ? t('Reprendre', 'Resume') : t('Pause', 'Pause')}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                whileHover={undefined}
+                pressScale={0.98}
+                className="pill-action"
+                aria-label={t(`Annuler ${d.name}`, `Cancel ${d.name}`)}
+                onClick={() => send({ type: 'download.cancel', id: d.id })}
+              >
+                <Icon name="close" size={14} />
+                {t('Annuler', 'Cancel')}
+              </Button>
+            </>
+          )}
+          {d.state === 'Interrupted' && !d.canceled && !pendingDownload(d) && d.canRetry && (
+            <Button
+              variant="ghost"
+              size="sm"
+              whileHover={undefined}
+              pressScale={0.98}
+              className="pill-action"
+              aria-label={t(`Réessayer ${d.name}`, `Retry ${d.name}`)}
+              onClick={() => send({ type: 'download.retry', id: d.id })}
+            >
+              <Icon name="play" size={14} />
+              {t('Réessayer', 'Retry')}
             </Button>
-          </>}
-          {d.state === 'Interrupted' && !d.canceled && !pendingDownload(d) && d.canRetry && <Button variant="ghost" size="sm" whileHover={undefined} pressScale={0.98} className="pill-action" aria-label={t(`Réessayer ${d.name}`,`Retry ${d.name}`)} onClick={() => send({ type: 'download.retry', id: d.id })}><Icon name="play" size={14}/>{t('Réessayer','Retry')}</Button>}
-          {!pendingDownload(d) && <Button variant="ghost" size="sm" whileHover={undefined} pressScale={0.98} className="pill-action" aria-label={t(`Retirer ${d.name} de la liste`,`Remove ${d.name} from the list`)} title={t('Retirer de la liste','Remove from the list')} onClick={() => send({ type: 'download.forget', id: d.id })}><Icon name="close" size={14}/></Button>}
+          )}
+          {!pendingDownload(d) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              whileHover={undefined}
+              pressScale={0.98}
+              className="pill-action"
+              aria-label={t(`Retirer ${d.name} de la liste`, `Remove ${d.name} from the list`)}
+              title={t('Retirer de la liste', 'Remove from the list')}
+              onClick={() => send({ type: 'download.forget', id: d.id })}
+            >
+              <Icon name="close" size={14} />
+            </Button>
+          )}
           {d.state === 'Completed' && (
             <>
-              <Button variant="ghost" size="sm" whileHover={undefined} pressScale={0.98} className="pill-action primary" aria-label={t(`Ouvrir ${d.name}`,`Open ${d.name}`)} onClick={() => send({ type: 'download.open', id: d.id })}>
-                <Icon name="file" size={14}/>{t('Ouvrir', 'Open')}
+              <Button
+                variant="ghost"
+                size="sm"
+                whileHover={undefined}
+                pressScale={0.98}
+                className="pill-action primary"
+                aria-label={t(`Ouvrir ${d.name}`, `Open ${d.name}`)}
+                onClick={() => send({ type: 'download.open', id: d.id })}
+              >
+                <Icon name="file" size={14} />
+                {t('Ouvrir', 'Open')}
               </Button>
-              <Button variant="ghost" size="sm" whileHover={undefined} pressScale={0.98} className="pill-action" aria-label={t(`Afficher ${d.name} dans le dossier`,`Show ${d.name} in folder`)} onClick={() => send({ type: 'download.reveal', id: d.id })}>
-                <Icon name="folder" size={14}/>{t('Dossier', 'Folder')}
+              <Button
+                variant="ghost"
+                size="sm"
+                whileHover={undefined}
+                pressScale={0.98}
+                className="pill-action"
+                aria-label={t(`Afficher ${d.name} dans le dossier`, `Show ${d.name} in folder`)}
+                onClick={() => send({ type: 'download.reveal', id: d.id })}
+              >
+                <Icon name="folder" size={14} />
+                {t('Dossier', 'Folder')}
               </Button>
             </>
           )}
         </div>
       </div>
       {pendingDownload(d) && (
-        // Taille inconnue : la barre défile au lieu d'afficher un pourcentage inventé.
-        <div className={`download-bar${pct === null ? ' unknown' : ''}${d.paused||d.state==='Interrupted'?' paused':''}`} role="progressbar" aria-label={d.name} aria-valuenow={pct ?? undefined} aria-valuemin={0} aria-valuemax={100}>
+        <div
+          className={`download-bar${pct === null ? ' unknown' : ''}${resumable ? ' paused' : ''}`}
+          role="progressbar"
+          aria-label={d.name}
+          aria-valuenow={pct ?? undefined}
+          aria-valuemin={0}
+          aria-valuemax={100}
+        >
           <div className="download-bar-fill" style={pct === null ? undefined : { width: `${pct}%` }} />
         </div>
       )}

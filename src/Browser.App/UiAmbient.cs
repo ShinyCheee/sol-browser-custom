@@ -16,7 +16,8 @@ public sealed partial class UiBridge
 {
     private static (byte R, byte G, byte B)? s_ambient;
     private DispatcherTimer? _ambientTimer;
-    private bool _ambientBusy;
+    private bool _ambientBusy, _ambientClosed;
+    private bool _windowForeground = true, _windowMinimized;
     private DateTime _ambientChanged;
 
     private static string? AmbientAccent => Settings?.LiveColor != false && s_ambient is var (r, g, b) ? $"rgb({r}, {g}, {b})" : null;
@@ -67,24 +68,44 @@ public sealed partial class UiBridge
         _ambientTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _ambientTimer.Tick += async (_, _) =>
         {
-            if (_ambientBusy) return;
+            if (_ambientBusy || _ambientClosed) return;
             _ambientBusy = true;
             try
             {
                 var id = _activeId;
-                await SampleOnceAsync(); // suit aussi un changement clair/sombre sans navigation
+                if (NeedsPageSampling) await SampleOnceAsync(); // suit aussi un changement clair/sombre sans navigation
                 var color = await ReadAmbientAsync();
                 if (_activeId == id) SetAmbient(color);
             }
             finally { _ambientBusy = false; }
         };
-        _ambientTimer.Start();
+        UpdateAmbientTimer();
     }
 
-    /// <summary>Fenêtre en arrière-plan : le suivi des couleurs ralentit pour laisser la page et le processeur au repos.</summary>
-    public void SetAmbientPace(bool foreground)
+    public void StopAmbient()
     {
-        if (_ambientTimer is not null) _ambientTimer.Interval = TimeSpan.FromSeconds(foreground ? 1 : 4);
+        _ambientClosed = true;
+        _ambientTimer?.Stop();
+    }
+
+    /// <summary>Fenêtre réduite ou en arrière-plan : arrête ou ralentit le suivi des couleurs.</summary>
+    public void SetWindowState(bool? foreground = null, bool? minimized = null)
+    {
+        if (foreground is { } fg) _windowForeground = fg;
+        if (minimized is { } min) _windowMinimized = min;
+        UpdateAmbientTimer();
+    }
+
+    public void SetAmbientPace(bool foreground) => SetWindowState(foreground: foreground);
+
+    private void UpdateAmbientTimer()
+    {
+        if (_ambientTimer is null) return;
+        var live = Settings?.LiveColor != false;
+        var shouldRun = !_ambientClosed && !_windowMinimized && (_windowForeground || live) && (NeedsPageSampling || live);
+        if (!shouldRun) { _ambientTimer.Stop(); return; }
+        _ambientTimer.Interval = TimeSpan.FromSeconds(_windowForeground ? 1 : 4);
+        if (!_ambientTimer.IsEnabled) _ambientTimer.Start();
     }
 
     private async Task<(byte R, byte G, byte B)?> ReadAmbientAsync()

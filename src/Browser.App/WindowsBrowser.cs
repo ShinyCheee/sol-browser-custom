@@ -57,7 +57,7 @@ public static class WindowsBrowser
             }
             using (var registered = Registry.CurrentUser.CreateSubKey(@"Software\RegisteredApplications"))
                 registered.SetValue("Sol", Client + @"\Capabilities");
-            SHChangeNotify(0x08000000 /* SHCNE_ASSOCCHANGED */, 0, 0, 0);
+            Win32Interop.SHChangeNotify(0x08000000 /* SHCNE_ASSOCCHANGED */, 0, 0, 0);
         }
         catch (Exception e) when (e is UnauthorizedAccessException or IOException or System.Security.SecurityException) { DebugLog.Write($"enregistrement : {e.Message}"); }
     }
@@ -77,12 +77,10 @@ public static class WindowsBrowser
             Registry.CurrentUser.DeleteSubKeyTree(Client, throwOnMissingSubKey: false);
             using (var registered = Registry.CurrentUser.OpenSubKey(@"Software\RegisteredApplications", writable: true))
                 registered?.DeleteValue("Sol", throwOnMissingValue: false);
-            SHChangeNotify(0x08000000, 0, 0, 0);
+            Win32Interop.SHChangeNotify(0x08000000, 0, 0, 0);
         }
         catch (Exception e) when (e is UnauthorizedAccessException or IOException or System.Security.SecurityException) { }
     }
-
-    [DllImport("shell32.dll")] private static extern void SHChangeNotify(int eventId, uint flags, nint item1, nint item2);
 
     // ---------- Ce que Windows demande d'ouvrir
 
@@ -111,7 +109,7 @@ public static class WindowsBrowser
             using var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.Out);
             pipe.Connect(2000);
             // Le lancement demandé par l'utilisateur transmet son droit de premier plan à la fenêtre existante.
-            if (GetNamedPipeServerProcessId(pipe.SafePipeHandle, out var processId)) AllowSetForegroundWindow(processId);
+            if (Win32Interop.GetNamedPipeServerProcessId(pipe.SafePipeHandle, out var processId)) Win32Interop.AllowSetForegroundWindow(processId);
             using var writer = new StreamWriter(pipe);
             foreach (var target in targets) writer.WriteLine(target);
             if (targets.Count == 0) writer.WriteLine(""); // lancé sans rien à ouvrir : la fenêtre existante passe devant
@@ -140,7 +138,4 @@ public static class WindowsBrowser
         }) { IsBackground = true, Name = "Sol.Ouvrir" };
         thread.Start();
     }
-
-    [DllImport("kernel32.dll")] private static extern bool GetNamedPipeServerProcessId(Microsoft.Win32.SafeHandles.SafePipeHandle pipe, out uint processId);
-    [DllImport("user32.dll")] private static extern bool AllowSetForegroundWindow(uint processId);
 }

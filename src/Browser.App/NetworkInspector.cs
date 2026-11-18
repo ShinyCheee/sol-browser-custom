@@ -48,11 +48,19 @@ public sealed partial class NetworkInspector(Action<string> post)
 
     public async Task ListenAsync(string tabId, CoreWebView2 core)
     {
+        if (_captureCores.TryGetValue(tabId, out var oldCore) && oldCore != core)
+        {
+            await SetCaptureAsync(tabId, oldCore, false);
+            _listening.Remove(tabId);
+            _receivers.Remove(tabId);
+            _capturing.Remove(tabId);
+            _captureCores.Remove(tabId);
+        }
         if (!_listening.Add(tabId)) { await SetCaptureAsync(tabId, core, true); return; }
         _captureCores[tabId] = core;
         _preserve.Add(tabId);
-        var log = _log[tabId] = new List<Entry>();
-        var console = _console[tabId] = new List<object>();
+        if (!_log.TryGetValue(tabId, out var log)) _log[tabId] = log = new List<Entry>();
+        if (!_console.TryGetValue(tabId, out var console)) _console[tabId] = console = new List<object>();
         core.NavigationStarting += (_, e) => { if (!e.IsRedirected && !_preserve.Contains(tabId)) Clear(tabId); };
         Entry? Find(JsonElement p) => Text(p, "requestId") is { } id ? log.FindLast(e => e.Id == id) : null;
 

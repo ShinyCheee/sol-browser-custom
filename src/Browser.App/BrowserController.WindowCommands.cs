@@ -53,6 +53,7 @@ public sealed partial class BrowserController
                 {
                     RestoreSession();
                     _sessionReady = true;
+                    ShortcutsChanged?.Invoke();
                     foreach (var shortcut in _settings.Shortcuts.Where(s => s.Icon is null)) _ = FetchShortcutIconAsync(shortcut);
                     // Première ouverture de ce profil : l'accueil (pas dans une fenêtre privée, qui ne garde rien).
                     if (!_settings.Onboarded && !AppPaths.Private) _ = _welcome.ShowAsync();
@@ -63,7 +64,7 @@ public sealed partial class BrowserController
                         if (target.Length > 0) { Open(target); Refresh(); }
                         if (Presenter?.State == OverlappedPresenterState.Minimized) Presenter.Restore();
                         _window.Activate();
-                        SetForegroundWindow(WinRT.Interop.WindowNative.GetWindowHandle(_window));
+                        Win32Interop.SetForegroundWindow(WinRT.Interop.WindowNative.GetWindowHandle(_window));
                     }));
                 }
                 foreach (var tabId in _favicons.Keys) PostFavicon(tabId);
@@ -107,7 +108,7 @@ public sealed partial class BrowserController
             case "zoom.in" or "zoom.out" or "zoom.reset" or "zoom.set": Zoom(c.Id ?? _tabs.ActiveId, c.Type, c.Index); return true;
             case "window.minimize":
                 if (Presenter is { } overlapped) overlapped.Minimize();
-                else ShowWindow(WinRT.Interop.WindowNative.GetWindowHandle(_window), 6); // plein écran : réduction demandée à Windows
+                else Win32Interop.ShowWindow(WinRT.Interop.WindowNative.GetWindowHandle(_window), 6); // plein écran : réduction demandée à Windows
                 break;
             case "window.maximize": // plein écran ou fenêtre
                 if (_settings.FullScreen)

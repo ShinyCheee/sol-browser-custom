@@ -1,9 +1,9 @@
-# Produit les versions publiables du navigateur : pour chaque architecture, un dossier autonome (aucun .NET à installer
+﻿# Produit les versions publiables du navigateur : pour chaque architecture, un dossier autonome (aucun .NET à installer
 # chez l'utilisateur), son archive zip, et le fichier des empreintes SHA-256 de toutes les archives.
 #   pwsh tools\publish.ps1                         x64 seulement
 #   pwsh tools\publish.ps1 -Arch x64,arm64,x86     les trois architectures de Windows
 # Avec l'outil Velopack (dotnet tool install -g vpk), chaque architecture reçoit aussi son installateur Setup.exe.
-#   pwsh tools\publish.ps1 -Out release            dossier de sortie (sinon D:\dev\sol-release sur le poste de dev)
+#   pwsh tools\publish.ps1 -Out release            dossier de sortie (sinon <disque>\dev\sol-release sur le poste de dev)
 # Seul le moteur web de Windows (WebView2 Runtime, présent d'origine sur Windows 11) reste requis sur la machine.
 param(
     [string[]]$Arch = @('x64'),
@@ -15,10 +15,11 @@ $Arch = $Arch | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim().To
 $unknown = $Arch | Where-Object { $_ -notin 'x64', 'arm64', 'x86' }
 if ($unknown) { throw "Architecture inconnue : $unknown (x64, arm64 ou x86)" }
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-# Poste de développement : outils et caches sont sur D: (voir env.ps1). Ailleurs (intégration continue), ceux du système.
-$dev = Test-Path 'D:\dev\dotnet'
+$drive = Split-Path $root -Qualifier
+# Poste de développement : outils et caches sont dans <disque>\dev (voir env.ps1). Ailleurs (intégration continue), ceux du système.
+$dev = Test-Path (Join-Path $drive 'dev\dotnet')
 if ($dev) { . (Join-Path $PSScriptRoot 'env.ps1') }
-if (-not $Out) { $Out = if ($dev) { 'D:\dev\sol-release' } else { Join-Path $root 'release' } }
+if (-not $Out) { $Out = if ($dev) { Join-Path $drive 'dev\sol-release' } else { Join-Path $root 'release' } }
 New-Item -ItemType Directory -Force $Out | Out-Null
 $Out = (Resolve-Path $Out).Path
 
@@ -43,11 +44,16 @@ foreach ($a in $Arch) {
         if (Test-Path $file) { Copy-Item $file $app }
     }
 
-    # Bibliothèques d'intelligence artificielle de Windows, livrées d'office avec le kit d'interface et dont le
-    # navigateur ne se sert pas : une quarantaine de Mo de moins. (Vérifié : il démarre et fonctionne sans elles.)
-    foreach ($unused in 'onnxruntime.dll', 'DirectML.dll') {
-        $file = Join-Path $app $unused
-        if (Test-Path $file) { [IO.File]::Delete($file) }
+    # Sur x64, onnxruntime.dll et onnxruntime_providers_shared.dll sont requis par Microsoft.ML.OnnxRuntime
+    # pour Silero VAD dans SolVoiceSegmenter. DirectML.dll reste inutilisé partout ; sur arm64 et x86, où la
+    # voix locale est désactivée, le runtime ONNX natif et les bibliothèques d'importation .lib sont retirés.
+    $unused = if ($a -eq 'x64') { @('DirectML.dll') } else { @('onnxruntime.dll', 'onnxruntime_providers_shared.dll', 'DirectML.dll') }
+    foreach ($name in $unused) {
+        $file = Join-Path $app $name
+        if (Test-Path -LiteralPath $file) { [IO.File]::Delete($file) }
+    }
+    if ($a -ne 'x64') {
+        Get-ChildItem -LiteralPath $app -Filter '*.lib' -File -ErrorAction SilentlyContinue | Remove-Item -Force
     }
 
     $zip = Join-Path $Out "Sol-$version-win-$a.zip"
@@ -55,7 +61,8 @@ foreach ($a in $Arch) {
     Compress-Archive -Path (Join-Path $app '*') -DestinationPath $zip
     # Installateur (Setup.exe) et paquet de mise à jour, si l'outil Velopack est là : installation par utilisateur,
     # sans droits d'administrateur, raccourcis, désinstallation, et mises à jour prises dans les publications GitLab.
-    $vpk = if (Test-Path 'D:\dev\tools\vpk.exe') { 'D:\dev\tools\vpk.exe' } else { (Get-Command vpk -ErrorAction SilentlyContinue).Source }
+    $devVpk = Join-Path $drive 'dev\tools\vpk.exe'
+    $vpk = if (Test-Path -LiteralPath $devVpk) { $devVpk } else { (Get-Command vpk -ErrorAction SilentlyContinue).Source }
     if ($vpk) {
         $env:DOTNET_ROLL_FORWARD = 'Major'
         # Identifiant « SolBrowser » : le dossier d'installation ne doit pas être celui des données (%LocalAppData%\Sol).

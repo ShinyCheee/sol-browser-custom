@@ -168,7 +168,18 @@ public class JsonFileStoreTests : IDisposable
         Assert.Equal(0, saved.FanTrigger);
         var delayed = new Settings { FanTrigger = 1 };
         delayed.ApplyFanDefault();
-        Assert.Equal(1, delayed.FanTrigger);
+        Assert.Equal(1, delayed.ApplyFanDefault() ? -1 : delayed.FanTrigger);
+    }
+
+    [Fact]
+    public async Task Concurrent_saves_to_the_same_file_remain_serialized_and_leave_no_temp_files()
+    {
+        var path = File_("concurrent.json");
+        await Task.WhenAll(Enumerable.Range(0, 16).Select(i =>
+            Task.Run(() => Assert.True(JsonFileStore.Save(path, new Settings { ProfileName = $"P{i}" })))));
+        var loaded = JsonFileStore.Load<Settings>(path);
+        Assert.StartsWith("P", loaded.ProfileName);
+        Assert.Empty(Directory.GetFiles(_dir, "*.tmp"));
     }
 
 }

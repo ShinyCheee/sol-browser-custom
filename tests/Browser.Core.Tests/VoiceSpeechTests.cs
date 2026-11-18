@@ -7,6 +7,7 @@ public class VoiceSpeechTests
     [Theory]
     [InlineData("~~~python\nprint('secret. ')\n~~~\nTexte normal. ")]
     [InlineData("````python\nsecret. ```\n````\nTexte normal. ")]
+    [InlineData("```python\n```not_closing\nsecret.\n```   \nTexte normal. ")]
     [InlineData("`secret. `Texte normal. ")]
     public void ExcludesAllCodeDelimitersIncludingFragmentedOnes(string input)
     {

@@ -10,17 +10,44 @@ class Engines:
         self.voice = None
         self.voice_path = None
 
+    def _close_asr(self):
+        session, model = self.session, self.model
+        self.session = None
+        self.model = None
+        self.model_path = None
+        if session is not None:
+            try:
+                session.close()
+            except Exception:
+                pass
+        if model is not None:
+            try:
+                model.close()
+            except Exception:
+                pass
+
+    def close(self):
+        self._close_asr()
+        self.voice = None
+        self.voice_path = None
+
     def warm(self, path):
         from transcribe_cpp import Model
         if not os.path.isfile(path):
             raise FileNotFoundError("model")
-        if self.model_path != path:
-            if self.session is not None:
-                self.session.close()
-            if self.model is not None:
-                self.model.close()
-            self.model = Model(path, backend="cpu")
-            self.session = self.model.session(n_threads=4)
+        if self.model_path != path or self.session is None or self.model is None:
+            self._close_asr()
+            model = Model(path, backend="cpu")
+            try:
+                session = model.session(n_threads=4)
+            except Exception:
+                try:
+                    model.close()
+                except Exception:
+                    pass
+                raise
+            self.model = model
+            self.session = session
             self.model_path = path
 
     def transcribe(self, path, pcm, language):
@@ -36,6 +63,8 @@ class Engines:
         if not os.path.isfile(path):
             raise FileNotFoundError("voice")
         if self.voice_path != path:
+            self.voice = None
+            self.voice_path = None
             # Avoid a spinning pool on every logical core while Parakeet is working.
             options = ort.SessionOptions()
             options.intra_op_num_threads = 2

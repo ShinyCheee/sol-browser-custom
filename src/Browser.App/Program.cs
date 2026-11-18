@@ -87,7 +87,7 @@ public static class Program
                 Set(new UpdateState(preview, 100, true));
                 return;
             }
-            var manager = new UpdateManager(new GitlabSource("https://gitlab.com/api/v4/projects/87215621", null, false));
+            var manager = new UpdateManager(new GitlabSource("https://gitlab.com/api/v4/projects/87215621", null!, false));
             if (!manager.IsInstalled) { SetCheck("portable"); return; }
             // Copie installée : Windows la connaît comme navigateur (« Ouvrir avec », applications par défaut).
             if (Environment.ProcessPath is { } exe) WindowsBrowser.Register(exe);

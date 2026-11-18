@@ -28,6 +28,16 @@ public interface IBackgroundDownload
 /// </summary>
 public sealed class FileDownload(string url, string resultPath, string? referer, string userAgent, IReadOnlyList<VideoCookie> cookies) : IBackgroundDownload
 {
+    private readonly object _gate = new();
+    private readonly string _url = url;
+    private readonly string _targetPath = resultPath;
+    private readonly string? _referer = referer;
+    private readonly string _userAgent = userAgent;
+    private readonly IReadOnlyList<VideoCookie> _cookies = cookies;
+    private CancellationTokenSource? _cancel;
+    private Task? _running;
+    private bool _resuming;
+
     public event Action? Changed;
     public string State { get; private set; } = "InProgress";
     public string Phase { get; private set; } = "parallel:0";
@@ -36,66 +46,140 @@ public sealed class FileDownload(string url, string resultPath, string? referer,
     public string ResultFilePath { get; private set; } = resultPath;
     public bool Paused { get; private set; }
     public bool Canceled { get; private set; }
-    public bool CanResume => State == "Interrupted" && !Canceled;
-    public string? RetryUrl => url;
-    private string Part => resultPath + ".part";
-    private CancellationTokenSource? _cancel;
-    private Task? _running;
-    private bool _resuming;
+    public bool CanResume => State == "Interrupted" && !Canceled && (Paused || File.Exists(SegmentedTransfer.PlanPath(Part)));
+    public string? RetryUrl => _url;
+    private string Part => _targetPath + ".part";
 
-    public void Start() => _running ??= Task.Run(RunAsync);
-    public void Pause() { if (State != "InProgress") return; Paused = true; _cancel?.Cancel(); }
+    public void Start()
+    {
+        lock (_gate)
+        {
+            if (_running is not null || Canceled) return;
+            _running = Task.Run(RunAsync);
+        }
+    }
+
+    public void Pause()
+    {
+        CancellationTokenSource? cancel;
+        lock (_gate)
+        {
+            if (State != "InProgress" || Canceled) return;
+            Paused = true;
+            cancel = _cancel;
+        }
+        try { cancel?.Cancel(); } catch (ObjectDisposedException) { }
+    }
+
     public void Cancel()
     {
-        if (State == "Completed") return;
-        Canceled = true; Paused = false; _cancel?.Cancel(); State = "Interrupted";
-        if (_running?.IsCompleted == true) RemovePartial();
+        CancellationTokenSource? cancel;
+        bool removeNow;
+        lock (_gate)
+        {
+            if (State == "Completed" || Canceled) return;
+            Canceled = true;
+            Paused = false;
+            State = "Interrupted";
+            Phase = "canceled";
+            cancel = _cancel;
+            removeNow = _running is null || _running.IsCompleted;
+        }
+        try { cancel?.Cancel(); } catch (ObjectDisposedException) { }
+        if (removeNow) RemovePartial();
         Changed?.Invoke();
     }
+
     public async void Resume()
     {
-        if (!CanResume || _resuming) return;
-        _resuming = true;
-        if (_running is not null) await _running;
-        if (Canceled) { _resuming = false; return; }
-        Paused = false; State = "InProgress"; _running = Task.Run(RunAsync); _resuming = false;
+        Task? previous;
+        lock (_gate)
+        {
+            if (!CanResume || _resuming) return;
+            _resuming = true;
+            previous = _running;
+        }
+        try
+        {
+            if (previous is not null) await previous.ConfigureAwait(false);
+            lock (_gate)
+            {
+                if (Canceled || State != "Interrupted") return;
+                Paused = false;
+                State = "InProgress";
+                _running = Task.Run(RunAsync);
+            }
+        }
+        catch
+        {
+            // RunAsync capture déjà ses exceptions ; ne jamais laisser échapper une erreur d'une méthode async void.
+        }
+        finally
+        {
+            lock (_gate) _resuming = false;
+        }
     }
 
     private async Task RunAsync()
     {
         using var cancellation = new CancellationTokenSource();
-        _cancel = cancellation;
-        if (Canceled || Paused) cancellation.Cancel();
-        using var http = SegmentedTransfer.Client(VideoCookie.Container(cookies));
+        lock (_gate)
+        {
+            _cancel = cancellation;
+            if (Canceled || Paused) cancellation.Cancel();
+        }
+        using var http = SegmentedTransfer.Client(VideoCookie.Container(_cookies));
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(resultPath)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(_targetPath)!);
             Phase = "parallel:0"; Changed?.Invoke();
             await SegmentedTransfer.RunAsync(http, Request, Part, (bytes, total) => { BytesReceived = bytes; TotalBytesToReceive = total; Changed?.Invoke(); },
                 cancellation.Token, connections: n => { Phase = "parallel:" + n; Changed?.Invoke(); });
-            ResultFilePath = Available(resultPath);
-            File.Move(Part, ResultFilePath);
-            BytesReceived = TotalBytesToReceive = new FileInfo(ResultFilePath).Length;
-            State = "Completed"; Phase = "done";
+            lock (_gate) if (Canceled || Paused) throw new OperationCanceledException();
+            var finalPath = MoveToAvailable(_targetPath);
+            MarkOfTheWeb.Apply(finalPath);
+            var length = new FileInfo(finalPath).Length;
+            var removeMoved = false;
+            lock (_gate)
+            {
+                if (Canceled) { removeMoved = true; State = "Interrupted"; Phase = "canceled"; }
+                else { ResultFilePath = finalPath; Paused = false; BytesReceived = TotalBytesToReceive = length; State = "Completed"; Phase = "done"; }
+            }
+            if (removeMoved) try { File.Delete(finalPath); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         }
-        catch (OperationCanceledException) { State = "Interrupted"; Phase = Canceled ? "canceled" : "paused"; }
-        // Toute autre erreur aussi : un téléchargement ne doit jamais rester « en cours » une fois sa tâche finie.
-        catch (Exception) { State = "Interrupted"; Phase = "failed"; }
+        catch (OperationCanceledException)
+        {
+            lock (_gate) if (State != "Completed") { State = "Interrupted"; Phase = Canceled ? "canceled" : Paused ? "paused" : "failed"; }
+        }
+        catch (Exception)
+        {
+            lock (_gate) if (State != "Completed") { Paused = false; State = "Interrupted"; Phase = Canceled ? "canceled" : "failed"; }
+        }
         finally
         {
-            _cancel = null;
-            if (Canceled) RemovePartial();
+            bool cleanup;
+            lock (_gate) { _cancel = null; cleanup = Canceled; }
+            if (cleanup) RemovePartial();
             Changed?.Invoke();
         }
     }
 
-
     private HttpRequestMessage Request()
     {
-        var request = new HttpRequestMessage(HttpMethod.Get, url);
-        if (Uri.TryCreate(referer, UriKind.Absolute, out var from) && from.Scheme is "http" or "https") request.Headers.Referrer = from;
-        if (userAgent.Length > 0) request.Headers.TryAddWithoutValidation("User-Agent", userAgent);
+        var request = new HttpRequestMessage(HttpMethod.Get, _url);
+        if (Uri.TryCreate(_referer, UriKind.Absolute, out var from) && from.Scheme is "http" or "https") request.Headers.Referrer = from;
+        if (_userAgent.Length > 0) request.Headers.TryAddWithoutValidation("User-Agent", _userAgent);
         return request;
+    }
+
+    private string MoveToAvailable(string path)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            var candidate = Available(path);
+            try { File.Move(Part, candidate); return candidate; }
+            catch (IOException) when (attempt < 20 && File.Exists(candidate)) { }
+        }
     }
 
     // Le moteur a réservé ce nom, mais un fichier du même nom a pu apparaître depuis.

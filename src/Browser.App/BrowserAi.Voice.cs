@@ -73,11 +73,22 @@ public sealed partial class BrowserController
             if (_chatBusy && _chatTrace?.Pending is null) return true;
             if (!_chatBusy) _voiceTurn = false;
             _voiceApproval = _chatTrace?.Pending?.Id;
-            if (SolVoiceWorker.Available) _ = _voice!.ListenAsync(Language.Current);
+            if (SolVoiceWorker.Available) _ = ListenInCurrentLanguageAsync();
         }
         PublishVoice(); return true;
     }
-    private void FinishVoiceTurn(string answer, bool success)
+    private async Task ListenInCurrentLanguageAsync()
+    {
+        if (_voice is not { } voice) return;
+        if (voice.CheckedLanguage != Language.Current)
+        {
+            _voicePreparation = voice.CheckAssetsAsync(Language.Current);
+            await _voicePreparation;
+        }
+        if (_voice == voice && _voiceOpen && AiReady && Chat?.IsOpen == true && voice.AssetsReady)
+            await voice.ListenAsync(Language.Current);
+    }
+    private void FinishVoiceTurn(bool success)
     {
         if (!_voiceTurn || !_voiceOpen || !AiReady || Chat?.IsOpen != true) return;
         _voiceTurn = false;

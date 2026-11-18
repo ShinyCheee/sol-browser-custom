@@ -9,15 +9,9 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
-  useState,
 } from "react";
-import {
-  PreviewRail,
-  type PreviewRailItem,
-} from "@/components/motion/preview-rail";
+import { t, useLang } from "@/i18n";
 import { cn } from "@/lib/utils";
-
-import { useMessageRail } from "./use-message-rail";
 
 export interface MessageScrollerProps extends ComponentPropsWithRef<"div"> {
   /** Keep streamed output pinned while the reader remains near the end. */
@@ -32,13 +26,8 @@ export interface MessageScrollerProps extends ComponentPropsWithRef<"div"> {
   label?: string;
   /** Marks the transcript as waiting for more streamed content. */
   busy?: boolean;
-  /** Adds a compact rail for navigating between rendered Message rows. */
-  navigation?: "rail";
-  /** Accessible label for the optional message navigation rail. */
-  navigationLabel?: string;
   viewportClassName?: string;
   contentClassName?: string;
-  railClassName?: string;
   viewportRef?: Ref<HTMLElement>;
   viewportProps?: Omit<
     ComponentPropsWithRef<"section">,
@@ -55,13 +44,10 @@ export function MessageScroller({
   followThreshold = 56,
   smooth = true,
   onFollowChange,
-  label = "Conversation",
+  label,
   busy,
-  navigation,
-  navigationLabel = "Message navigation",
   viewportClassName,
   contentClassName,
-  railClassName,
   viewportRef: externalViewportRef,
   viewportProps,
   contentProps,
@@ -69,6 +55,8 @@ export function MessageScroller({
   children,
   ...props
 }: MessageScrollerProps) {
+  useLang();
+  const resolvedLabel = label ?? t("Discussion", "Conversation");
   const reduce = useReducedMotion() ?? false;
   const viewportRef = useRef<HTMLElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -76,7 +64,6 @@ export function MessageScroller({
   const programmaticScrollRef = useRef(false);
   const scrollTimerRef = useRef<number | undefined>(undefined);
   const frameRef = useRef<number | undefined>(undefined);
-  const { railItems, activeRailId, setActiveRailId, railOverflowing, railTargetsRef, updateActiveRailItem, scheduleRailSync } = useMessageRail(navigation, followThreshold, viewportRef, contentRef);
   const {
     onScroll: onViewportScroll,
     onWheel: onViewportWheel,
@@ -117,9 +104,12 @@ export function MessageScroller({
       viewport.scrollTop = viewport.scrollHeight;
     }
     if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
-    scrollTimerRef.current = window.setTimeout(() => {
-      programmaticScrollRef.current = false;
-    }, behavior === "smooth" ? 320 : 0);
+    scrollTimerRef.current = window.setTimeout(
+      () => {
+        programmaticScrollRef.current = false;
+      },
+      behavior === "smooth" ? 320 : 0,
+    );
   }, []);
 
   const handleScroll = useCallback(() => {
@@ -129,8 +119,7 @@ export function MessageScroller({
     const distance =
       viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
     setFollowing(distance <= followThreshold);
-    updateActiveRailItem();
-  }, [followThreshold, setFollowing, updateActiveRailItem]);
+  }, [followThreshold, setFollowing]);
 
   const leaveLiveEdge = useCallback(() => {
     programmaticScrollRef.current = false;
@@ -151,14 +140,13 @@ export function MessageScroller({
     if (!content || typeof ResizeObserver === "undefined") return;
 
     const observer = new ResizeObserver(() => {
-      scheduleRailSync();
       if (!followOutput || !followingRef.current) return;
       scrollToEnd(reduce || !smooth ? "auto" : "smooth");
     });
     observer.observe(content);
 
     return () => observer.disconnect();
-  }, [followOutput, reduce, scheduleRailSync, scrollToEnd, smooth]);
+  }, [followOutput, reduce, scrollToEnd, smooth]);
 
   useEffect(
     () => () => {
@@ -168,121 +156,51 @@ export function MessageScroller({
     [],
   );
 
-  const scrollToRailItem = useCallback(
-    (item: PreviewRailItem) => {
-      const viewport = viewportRef.current;
-      const target = railTargetsRef.current.get(item.id);
-      if (!viewport || !target) return;
-
-      const lastItem = railItems.at(-1)?.id === item.id;
-      setActiveRailId(item.id);
-      if (lastItem) {
-        setFollowing(true);
-        scrollToEnd(reduce || !smooth ? "auto" : "smooth");
-        return;
-      }
-
-      setFollowing(false);
-      programmaticScrollRef.current = true;
-      const viewportRect = viewport.getBoundingClientRect();
-      const targetRect = target.getBoundingClientRect();
-      const top =
-        viewport.scrollTop +
-        targetRect.top -
-        viewportRect.top -
-        (viewport.clientHeight - targetRect.height) / 2;
-      const behavior = reduce || !smooth ? "auto" : "smooth";
-
-      if (typeof viewport.scrollTo === "function") {
-        viewport.scrollTo({ top, behavior });
-      } else {
-        viewport.scrollTop = top;
-      }
-      if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
-      scrollTimerRef.current = window.setTimeout(() => {
-        programmaticScrollRef.current = false;
-      }, behavior === "smooth" ? 320 : 0);
-    },
-    [railItems, reduce, scrollToEnd, setFollowing, smooth],
-  );
-
-  const viewport = (
-    <section
-      ref={setViewportRef}
-      aria-label={label}
-      {...restViewportProps}
-      onScroll={(event) => {
-        handleScroll();
-        onViewportScroll?.(event);
-      }}
-      onWheel={(event) => {
-        leaveLiveEdge();
-        onViewportWheel?.(event);
-      }}
-      onTouchStart={(event) => {
-        leaveLiveEdge();
-        onViewportTouchStart?.(event);
-      }}
-      onKeyDown={(event) => {
-        if (["ArrowUp", "PageUp", "Home"].includes(event.key)) {
-          leaveLiveEdge();
-        }
-        onViewportKeyDown?.(event);
-      }}
-      className={cn(
-        "h-full overflow-y-auto overscroll-contain outline-none [overflow-anchor:none] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-        navigation === "rail"
-          ? "[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          : "[scrollbar-gutter:stable]",
-        viewportClassName,
-        navigation === "rail" && railOverflowing && "pr-10",
-      )}
-    >
-      <div
-        ref={contentRef}
-        role="log"
-        aria-live="polite"
-        aria-relevant="additions text"
-        aria-busy={busy}
-        className={contentClassName}
-        {...contentProps}
-      >
-        {children}
-      </div>
-    </section>
-  );
-
   return (
     <div
       data-slot="message-scroller"
       className={cn("min-h-0", className)}
       {...props}
     >
-      {navigation === "rail" ? (
-        <PreviewRail
-          items={railOverflowing ? railItems : []}
-          label={navigationLabel}
-          activeId={activeRailId}
-          onItemSelect={scrollToRailItem}
-          previewSide="before"
-          highlightActive
-          itemSize={14}
-          className="h-full min-h-0 overflow-hidden"
-          previewContainerClassName="right-8 left-3"
-          previewClassName="mr-1 w-64 max-w-full [&_[data-slot=preview-rail-card]]:h-20 [&_[data-slot=preview-rail-card]]:overflow-hidden [&_[data-slot=preview-rail-card]]:p-3 [&_[data-slot=preview-rail-title]]:line-clamp-1 [&_[data-slot=preview-rail-title]]:text-xs [&_[data-slot=preview-rail-title]]:leading-4 [&_[data-slot=preview-rail-description]]:line-clamp-2 [&_[data-slot=preview-rail-description]]:text-xs [&_[data-slot=preview-rail-description]]:leading-4"
-          railClassName={cn(
-            "absolute inset-y-3 right-1 w-7 content-center py-1 [&_[data-slot=preview-rail-item]]:w-7 [&_[data-slot=preview-rail-item]]:justify-end [&_[data-slot=preview-rail-tick]]:h-px [&_[data-slot=preview-rail-tick]]:w-4 [&_[data-slot=preview-rail-tick]]:origin-right",
-            railOverflowing
-              ? "pointer-events-auto opacity-100"
-              : "pointer-events-none opacity-0",
-            railClassName,
-          )}
+      <section
+        ref={setViewportRef}
+        aria-label={resolvedLabel}
+        {...restViewportProps}
+        onScroll={(event) => {
+          handleScroll();
+          onViewportScroll?.(event);
+        }}
+        onWheel={(event) => {
+          leaveLiveEdge();
+          onViewportWheel?.(event);
+        }}
+        onTouchStart={(event) => {
+          leaveLiveEdge();
+          onViewportTouchStart?.(event);
+        }}
+        onKeyDown={(event) => {
+          if (["ArrowUp", "PageUp", "Home"].includes(event.key)) {
+            leaveLiveEdge();
+          }
+          onViewportKeyDown?.(event);
+        }}
+        className={cn(
+          "h-full overflow-y-auto overscroll-contain outline-none [overflow-anchor:none] [scrollbar-gutter:stable] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+          viewportClassName,
+        )}
+      >
+        <div
+          ref={contentRef}
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions text"
+          aria-busy={busy}
+          className={contentClassName}
+          {...contentProps}
         >
-          {viewport}
-        </PreviewRail>
-      ) : (
-        viewport
-      )}
+          {children}
+        </div>
+      </section>
     </div>
   );
 }

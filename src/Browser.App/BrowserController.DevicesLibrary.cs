@@ -67,7 +67,7 @@ public sealed partial class BrowserController
     private void FollowNetwork()
     {
         if (!_tools.IsOpen || _tabs.ActiveId is not { } active || _pages.CoreOf(active) is not { } core) return;
-        if (_network.Shown == active && _network.Listening) return;
+        if (_network.Shown == active && _network.IsListeningTo(active, core)) return;
         _network.Shown = active;
         _ = _network.ListenAsync(active, core);
         _network.Post();
@@ -137,7 +137,7 @@ public sealed partial class BrowserController
             if (PermissionStore.OriginOf(_pages.CoreOf(tabId)?.Source ?? "") is not null && !_pages.CoreOf(tabId)!.Source.StartsWith("https://start.sol/"))
                 items.Add((T("Vider la session de ce site…", "Clear this site's session…"), () => _afterMenu = () => AskResetSite(tabId)));
             items.Add((_tools.IsOpen ? T("Masquer l'inspecteur réseau", "Hide network inspector") : T("Inspecter le réseau", "Inspect network"), () => _afterMenu = ToggleNetwork));
-            if (_pages.CoreOf(tabId) is { } designCore && IsWebAddress(designCore.Source) && !designCore.Source.StartsWith("https://start.sol/") && !_pages.IsPdf(tabId))
+            if (_pages.CoreOf(tabId) is { } designCore && IsWeb(designCore.Source) && !designCore.Source.StartsWith("https://start.sol/") && !_pages.IsPdf(tabId))
                 items.Add((_designTabs.Contains(tabId) ? T("Masquer l'inspecteur de design", "Hide design inspector") : T("Inspecteur de design", "Design inspector"), () => _afterMenu = () => _ = ToggleDesignAsync(tabId)));
             items.Add((T("DevTools natifs · F12", "Native DevTools · F12"), () => _afterMenu = OpenDevTools));
 
@@ -219,49 +219,57 @@ public sealed partial class BrowserController
     // Les onglets rouverts restent endormis : seul celui qu'on affiche charge sa page (voir PageHost.AddAsleep).
     private void RestoreSession(Session? saved = null, bool restoreLayout = false)
     {
+        var needsRefresh = false;
         _restoringSession = true;
         try
         {
-        var session = saved ?? App.StartupSession;
-        var tabs = session.Urls.Select((url, i) => Open(url, activate: false, pinned: i < session.PinnedCount, asleep: true,
-            sessionId: i < session.SessionIds.Count ? session.SessionIds[i] : "")).ToList();
-        if (tabs.Count == 0) { Open(_settings.HomePage); return; }
-        foreach (var tab in tabs) _restored.Add(tab.Id);
-        for (var i = 0; i < tabs.Count && i < session.TranslationOriginals.Count; i++)
-            if (PageTranslation.GoogleUrl(session.TranslationOriginals[i], "fr") is not null)
-                _translationOriginals[tabs[i].Id] = session.TranslationOriginals[i];
-        for (var i = 0; i < tabs.Count && i < session.Titles.Count; i++)
-            if (session.Titles[i].Length > 0) _tabs.Update(tabs[i].Id, title: session.Titles[i]);
-        // Pages qui étaient ouvertes dans un raccourci : elles y retournent.
-        for (var i = 0; i < tabs.Count && i < session.ShortcutOf.Count; i++)
-            if (tabs[i].Pinned && session.ShortcutOf[i] is { } rank && rank >= 0 && rank < _settings.Shortcuts.Count)
-                _shortcutTabs.TryAdd(_settings.Shortcuts[rank], tabs[i].Id);
-        // Icônes des sites : affichées tout de suite, sans attendre que chaque onglet soit rechargé.
-        for (var i = 0; i < tabs.Count && i < session.Icons.Count; i++)
-            if (session.Icons[i].StartsWith("data:image/", StringComparison.Ordinal)) _favicons[tabs[i].Id] = session.Icons[i];
-        // Appareil simulé : repris quand l'onglet se réveille.
-        for (var i = 0; i < tabs.Count && i < session.Devices.Count; i++)
-            if (session.Devices[i].Split('|') is [{ Length: > 0 } device, .. var rest]) _pages.WantDevice(tabs[i].Id, device, rest.Contains("L"));
+            var session = saved ?? App.StartupSession;
+            var tabs = session.Urls.Select((url, i) => Open(url, activate: false, pinned: i < session.PinnedCount, asleep: true,
+                sessionId: i < session.SessionIds.Count ? session.SessionIds[i] : "", isPrivate: AppPaths.Private)).ToList();
+            if (tabs.Count == 0) { Open(_settings.HomePage, isPrivate: AppPaths.Private); return; }
+            foreach (var tab in tabs) _restored.Add(tab.Id);
+            for (var i = 0; i < tabs.Count && i < session.TranslationOriginals.Count; i++)
+                if (PageTranslation.GoogleUrl(session.TranslationOriginals[i], "fr") is not null)
+                    _translationOriginals[tabs[i].Id] = session.TranslationOriginals[i];
+            for (var i = 0; i < tabs.Count && i < session.Titles.Count; i++)
+                if (session.Titles[i].Length > 0) _tabs.Update(tabs[i].Id, title: session.Titles[i]);
+            // Pages qui étaient ouvertes dans un raccourci : elles y retournent.
+            for (var i = 0; i < tabs.Count && i < session.ShortcutOf.Count; i++)
+                if (tabs[i].Pinned && session.ShortcutOf[i] is { } rank && rank >= 0 && rank < _settings.Shortcuts.Count)
+                    _shortcutTabs.TryAdd(_settings.Shortcuts[rank], tabs[i].Id);
+            // Icônes des sites : affichées tout de suite, sans attendre que chaque onglet soit rechargé.
+            for (var i = 0; i < tabs.Count && i < session.Icons.Count; i++)
+                if (session.Icons[i].StartsWith("data:image/", StringComparison.Ordinal)) _favicons[tabs[i].Id] = session.Icons[i];
+            // Appareil simulé : repris quand l'onglet se réveille.
+            for (var i = 0; i < tabs.Count && i < session.Devices.Count; i++)
+                if (session.Devices[i].Split('|') is [{ Length: > 0 } device, .. var rest]) _pages.WantDevice(tabs[i].Id, device, rest.Contains("L"));
 
-        // Groupes : recréés autour de leurs onglets, qui étaient voisins à l'enregistrement.
-        for (var g = 0; g < session.Groups.Count; g++)
-        {
-            TabGroup? group = null;
-            for (var i = 0; i < tabs.Count && i < session.GroupOf.Count; i++)
+            // Groupes : recréés autour de leurs onglets, qui étaient voisins à l'enregistrement.
+            for (var g = 0; g < session.Groups.Count; g++)
             {
-                if (session.GroupOf[i] != g) continue;
-                if (group is null) group = _tabs.CreateGroup(tabs[i].Id, session.Groups[g].Name, session.Groups[g].Color, session.Groups[g].Collapsed, session.Groups[g].Icon);
-                else _tabs.AddToGroup(tabs[i].Id, group.Id);
+                TabGroup? group = null;
+                for (var i = 0; i < tabs.Count && i < session.GroupOf.Count; i++)
+                {
+                    if (session.GroupOf[i] != g) continue;
+                    if (group is null) group = _tabs.CreateGroup(tabs[i].Id, session.Groups[g].Name, session.Groups[g].Color, session.Groups[g].Collapsed, session.Groups[g].Icon);
+                    else _tabs.AddToGroup(tabs[i].Id, group.Id);
+                }
+            }
+
+            if (session.ActiveIndex >= 0 && session.ActiveIndex < tabs.Count) Activate(tabs[session.ActiveIndex].Id);
+            else Open(_settings.HomePage, isPrivate: AppPaths.Private);
+            if (restoreLayout && session.PrimaryIndex is { } p && session.SecondaryIndex is { } s
+                && p >= 0 && s >= 0 && p < tabs.Count && s < tabs.Count && p != s)
+            {
+                _split.Open(tabs[p].Id, tabs[s].Id);
+                KeepPairAdjacent();
+                _split.Resize(session.Ratio);
+                Activate(tabs[p].Id);
+                needsRefresh = true;
             }
         }
-
-        if (session.ActiveIndex >= 0 && session.ActiveIndex < tabs.Count) Activate(tabs[session.ActiveIndex].Id);
-        else Open(_settings.HomePage);
-        if (restoreLayout && session.PrimaryIndex is { } p && session.SecondaryIndex is { } s
-            && p >= 0 && s >= 0 && p < tabs.Count && s < tabs.Count && p != s)
-        { _split.Open(tabs[p].Id, tabs[s].Id); _split.Resize(session.Ratio); Activate(tabs[p].Id); Refresh(); }
-        }
         finally { _restoringSession = false; }
+        if (needsRefresh) Refresh();
     }
 
     private const int MaxSessionIcon = 48_000; // caractères : une icône plus lourde n'est pas gardée dans la session

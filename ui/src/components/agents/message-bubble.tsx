@@ -25,6 +25,7 @@ import {
   SPRING_SWAP,
 } from "@/lib/ease";
 import { cn } from "@/lib/utils";
+import { t } from "@/i18n";
 import { MessageSideContext } from "@/components/agents/message-context";
 
 import { MessageBubbleVariant, MessageBubbleAlign, MessageBubbleContextValue, MessageBubbleContext, MessageBubbleLayoutContext, MessageBubbleProps, MessageBubbleContentProps, MessageBubbleGroupProps, MessageBubbleCollapsibleProps, mergeRefs, BUBBLE_CONTENT_REVEAL, BUBBLE_POP } from "./message-bubble-shared";
@@ -229,8 +230,8 @@ export function MessageBubbleCollapsible({
   defaultOpen = false,
   onOpenChange,
   collapsedLines = 4,
-  moreLabel = "Show more",
-  lessLabel = "Show less",
+  moreLabel = t("Voir plus", "Show more"),
+  lessLabel = t("Voir moins", "Show less"),
   contentClassName,
   triggerClassName,
   className,

@@ -19,6 +19,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { t, useLang } from "@/i18n";
 import { SPRING_LAYOUT } from "@/lib/ease";
 import { cn } from "@/lib/utils";
 
@@ -83,19 +84,27 @@ export interface SortableListProps<T extends { id: string }> {
 
 /** Stable item ids keep focus and content attached to their row during sorting. */
 export function SortableList<T extends { id: string }>({
-  instructionsText="Drag a handle to reorder. With a handle focused, use Up and Down to move, Home and End to move to the edges.",
+  instructionsText,
   items: controlledItems,
   defaultItems = [],
   onItemsChange,
   renderItem,
   getItemLabel,
   children,
-  label = "Sortable items",
+  label,
   disabled = false,
   showUndo = true,
   className,
   itemClassName,
 }: SortableListProps<T>) {
+  useLang();
+  const resolvedInstructions =
+    instructionsText ??
+    t(
+      "Glissez une poignée pour réorganiser. Avec le focus, utilisez les flèches Haut et Bas, Début et Fin.",
+      "Drag a handle to reorder. With a handle focused, use Up and Down to move, Home and End to move to the edges.",
+    );
+  const resolvedLabel = label ?? t("Éléments réorganisables", "Sortable items");
   const [internalItems, setInternalItems] = useState(defaultItems);
   const items = controlledItems ?? internalItems;
   const ids = items.map((item) => item.id);
@@ -159,7 +168,10 @@ export function SortableList<T extends { id: string }>({
     setPrevious(current.map((item) => item.id));
     change(next);
     setAnnouncement(
-      `${getItemLabel(item)} moved to position ${to + 1} of ${current.length}.`,
+      t(
+        `${getItemLabel(item)} déplacé en position ${to + 1} sur ${current.length}.`,
+        `${getItemLabel(item)} moved to position ${to + 1} of ${current.length}.`,
+      ),
     );
   };
   if (
@@ -178,12 +190,12 @@ export function SortableList<T extends { id: string }>({
       previous.find((id, index) => id !== ids[index]) ?? previous[0];
     reorder(previous);
     setPrevious(null);
-    setAnnouncement("Previous order restored.");
+    setAnnouncement(t("Ordre précédent rétabli.", "Previous order restored."));
   };
   const context: ListContextValue = {
     ids,
     labels: new Map(items.map((item) => [item.id, getItemLabel(item)])),
-    label,
+    label: resolvedLabel,
     disabled,
     instructions,
     itemClassName,
@@ -203,7 +215,10 @@ export function SortableList<T extends { id: string }>({
       if (item && before?.some((oldId, at) => oldId !== current[at]?.id)) {
         setPrevious(before);
         setAnnouncement(
-          `${getItemLabel(item)} moved to position ${index + 1} of ${current.length}.`,
+          t(
+            `${getItemLabel(item)} déplacé en position ${index + 1} sur ${current.length}.`,
+            `${getItemLabel(item)} moved to position ${index + 1} of ${current.length}.`,
+          ),
         );
       }
     },
@@ -213,11 +228,11 @@ export function SortableList<T extends { id: string }>({
     <ListContext.Provider value={context}>
       <div ref={root} className={cn("w-full max-w-md", className)}>
         <p id={instructions} className="sr-only">
-          {instructionsText}
+          {resolvedInstructions}
         </p>
         {children === undefined ? (
           <>
-            <SortableListGroup aria-label={label}>
+            <SortableListGroup aria-label={resolvedLabel}>
               {items.map((item, index) => (
                 <SortableListItem key={item.id} id={item.id}>
                   <SortableListHandle />

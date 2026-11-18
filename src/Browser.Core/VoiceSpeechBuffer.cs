@@ -9,9 +9,10 @@ public sealed class VoiceSpeechBuffer
     private int _spoken;
     public IReadOnlyList<string> Append(string delta)
     {
-        if (_spoken >= 4000) return [];
-        if (_pending.Length + delta.Length > 80_000) return [];
+        if (_spoken >= 4000 || delta.Length == 0 || _pending.Length + delta.Length > 80_000) return [];
+        var hadTrailingBoundary = _pending.Length > 0 && _pending[^1] is '.' or '!' or '?' or '\n';
         _pending.Append(delta);
+        if (!hadTrailingBoundary && delta.AsSpan().IndexOfAny(".!?\n`~") < 0) return [];
         return Drain(false);
     }
     public IReadOnlyList<string> Finish() => Drain(true);

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 
 namespace Browser.Core;
@@ -25,8 +26,19 @@ public sealed class CategoryIndex
 public static class SolAiCategories
 {
     public const int MaxCategories = 12, BatchSize = 250, BatchesPerDay = 10;
+    private static readonly ConcurrentDictionary<string, string?> DomainCache = new(StringComparer.Ordinal);
 
-    public static string? Domain(string url) =>
+    public static string? Domain(string url)
+    {
+        if (url.Length > 2048) return ComputeDomain(url);
+        if (DomainCache.TryGetValue(url, out var cached)) return cached;
+        var computed = ComputeDomain(url);
+        if (DomainCache.Count >= 8192) DomainCache.Clear();
+        DomainCache[url] = computed;
+        return computed;
+    }
+
+    private static string? ComputeDomain(string url) =>
         Uri.TryCreate(url, UriKind.Absolute, out var u) && u.Scheme is "http" or "https" && u.UserInfo.Length == 0 && u.Host is { Length: > 0 } host
             && !host.Equals("start.sol", StringComparison.OrdinalIgnoreCase)
             ? (host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? host[4..] : host).ToLowerInvariant() : null;

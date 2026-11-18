@@ -64,6 +64,16 @@ public class BackupTests : IDisposable
         Assert.False(File.Exists(Path.Combine(_dir, "evil.txt")));
         Assert.False(Directory.Exists(Path.Combine(target, "notes")));
     }
+
+    [Theory]
+    [InlineData("extensions/CON/main.js")]
+    [InlineData("extensions/abc/nul.txt")]
+    [InlineData("extensions/abc/com1.json")]
+    [InlineData("extensions/abc/LPT9")]
+    [InlineData("extensions/abc/trailing./main.js")]
+    [InlineData("extensions/abc/trailing /main.js")]
+    public void Allowed_rejects_windows_reserved_device_names_and_trailing_dots_or_spaces(string path) =>
+        Assert.False(Backup.Allowed(path));
     [Fact]
     public void Passwords_are_read_from_an_exported_csv()
     {

@@ -16,7 +16,7 @@ export function useNotes(initial:NotesContent|null=null,autosave=true){
       }
       current.current={...incoming,draft};setData(current.current);
     });
-    send({type:'notes.ready'});return off;
+    if(!initial)send({type:'notes.ready'});return off;
   },[]);
   useEffect(()=>{if(!autosave||!data||data.error||!dirtyNote(data)||!data.draft.id&&!data.draft.text.trim()&&!data.draft.files.length)return;
     const timer=setTimeout(()=>{const d=current.current?.draft;if(d)send({type:'notes.autosave',id:d.id,title:d.title,input:d.text})},750);return()=>clearTimeout(timer);

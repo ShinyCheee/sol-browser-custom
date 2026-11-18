@@ -17,6 +17,7 @@ import { ActionSwapText } from "@/components/motion/action-swap";
 import { EASE_OUT, SPRING_LAYOUT } from "@/lib/ease";
 import { useDismiss } from "@/lib/hooks/use-dismiss";
 import { useTapGesture } from "@/lib/hooks/use-tap-gesture";
+import { t } from "@/i18n";
 import { cn } from "@/lib/utils";
 
 import {STACK_PEEK,STACK_INSET,useControllableExpanded,NotificationCardContent,type NotificationStackProps} from "./notification-stack-parts";
@@ -28,9 +29,9 @@ export function NotificationStack({
   onExpandedChange,
   onViewAll,
   maxVisible = 3,
-  collapsedLabel = "Notifications",
-  expandedLabel = "View all",
-  emptyLabel = "All caught up",
+  collapsedLabel = t("Notifications", "Notifications"),
+  expandedLabel = t("Voir tout", "View all"),
+  emptyLabel = t("Tout est à jour", "All caught up"),
   ariaLabel,
   className,
   classNames,

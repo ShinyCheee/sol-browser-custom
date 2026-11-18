@@ -8,6 +8,7 @@ public sealed partial class BrowserController
         var id = c.Id ?? "";
         switch(c.Type)
         {
+            case "notes.ready": PublishNotes(); return true;
             case "notes.manage":
                 HidePopup();
                 if (_tabs.Tabs.FirstOrDefault(t => t.Url == QuickNotes.PageUrl) is { } notesTab) Activate(notesTab.Id);
@@ -25,7 +26,7 @@ public sealed partial class BrowserController
             case "notes.link":
                 if (c.Url is { Length: <= 4096 } link && Uri.TryCreate(link, UriKind.Absolute, out var linkUri) && linkUri.Scheme is "http" or "https" && linkUri.UserInfo.Length == 0)
                 { Open(link); Refresh(); } return true;
-            case "notes.open": OpenNotes(c.X ?? 450, c.Y ?? 60); return true;
+            case "notes.open": OpenNotes(); return true;
             case "notes.draft":
                 if (c.Title!.Length <= 120 && c.Input!.Length <= 50_000 && c.Id == _noteDraft.Id)
                     _noteDraft = _noteDraft with { Title = c.Title, Text = c.Input };
@@ -64,7 +65,7 @@ public sealed partial class BrowserController
                     _noteSelection = null;
                 }
                 else return true;
-                _noteError = null; OpenNotes(450, 60); return true;
+                _noteError = null; OpenNotes(); return true;
             default: return ExecuteNoteExtras(c);
         }
     }

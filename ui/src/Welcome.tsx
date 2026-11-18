@@ -5,13 +5,14 @@ import { Icon } from './Icons';
 import { WelcomeIdentity } from './WelcomeIdentity';
 import logo from './assets/logo.png';
 import { WelcomeCloud } from './WelcomeCloud';
-import type { CloudState } from './SettingsCloud';
-import { Button } from '@/components/motion/button';
+import type { CloudState } from './cloudErrors';
+import { Button } from '@/components/motion/button/base';
 import { Input } from '@/components/motion/input';
 import { Switch } from '@/components/motion/switch';
 import { Card } from '@/components/motion/card';
 import SolTabs from './SolTabs';
-import {WelcomeFonts} from './WelcomeFonts';
+import { WelcomeFonts } from './WelcomeFonts';
+import './welcome.css';
 
 type Browser = { id: string; name: string; profiles: { folder: string; name: string }[] };
 type Setup = {

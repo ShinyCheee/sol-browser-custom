@@ -1,4 +1,4 @@
-# Construit des MSIX non signés pour Partner Center ; aucune installation ni modification des certificats.
+﻿# Construit des MSIX non signés pour Partner Center ; aucune installation ni modification des certificats.
 param(
     [ValidateSet('x64', 'arm64', 'x86')][string[]]$Arch = @('x64', 'arm64', 'x86'),
     [string]$Out,
@@ -54,6 +54,18 @@ try {
         }
         foreach ($notice in 'THIRD-PARTY-NOTICES.md', 'LICENSE') {
             Copy-Item (Join-Path $root $notice) $app
+        }
+        # Allège les MSIX sans toucher aux DLL ONNX Runtime requises par la voix locale sur x64.
+        $unused = if ($a -ne 'x64') { @('onnxruntime.dll', 'onnxruntime_providers_shared.dll', 'DirectML.dll') } else { @('DirectML.dll') }
+        foreach ($name in $unused) {
+            $file = Join-Path $app $name
+            if (Test-Path -LiteralPath $file) { [IO.File]::Delete($file) }
+        }
+        foreach ($pattern in 'onnxruntime*.lib', 'onnxruntime*.pdb', 'Microsoft.ML.OnnxRuntime*.pdb', 'DirectML.pdb') {
+            Get-ChildItem -LiteralPath $app -Filter $pattern -File -ErrorAction SilentlyContinue | Remove-Item -Force
+        }
+        if ($a -ne 'x64') {
+            Get-ChildItem -LiteralPath $app -Filter '*.lib' -File -ErrorAction SilentlyContinue | Remove-Item -Force
         }
         $assets = Join-Path $app 'StoreAssets'
         New-Item -ItemType Directory $assets | Out-Null

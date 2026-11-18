@@ -17,6 +17,16 @@ public class PdfImageTests
         Assert.Equal((300, 200), PdfImage.JpegSize(Jpeg));
 
     [Fact]
+    public void JpegSize_accepts_0xff_fill_bytes_and_Wrap_rejects_non_positive_scale()
+    {
+        byte[] padded = [0xFF, 0xD8, 0xFF, 0xFF, 0xFF, 0xC0, 0x00, 0x11, 0x08, 0x00, 0x64, 0x00, 0xC8, 0x03, 0x01, 0x22, 0x00, 0x02, 0x11, 0x01, 0x03, 0x11, 0x01, 0xFF, 0xD9];
+        Assert.Equal((200, 100), PdfImage.JpegSize(padded));
+        Assert.Throws<ArgumentOutOfRangeException>(() => PdfImage.Wrap(Jpeg, 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => PdfImage.Wrap(Jpeg, -1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => PdfImage.Wrap(Jpeg, double.NaN));
+    }
+
+    [Fact]
     public void JpegSize_rejects_other_data() =>
         Assert.Throws<InvalidDataException>(() => PdfImage.JpegSize([0x89, 0x50, 0x4E, 0x47]));
 

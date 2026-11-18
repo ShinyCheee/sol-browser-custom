@@ -26,7 +26,7 @@ public sealed partial class BrowserController
     // run : action lancée tout de suite depuis le menu contextuel, sans passer par le choix dans la vue.
     private async Task OpenPageAiAsync(string id, PageAiText? selected = null, string? run = null, string? tab = null)
     {
-        if (!AiReady || _tabs.Tabs.Any(t => t.Id == id && t.Private) || _pages.CoreOf(id) is not { } core || !IsWebAddress(core.Source) || core.Source.StartsWith("https://start.sol/")) return;
+        if (!AiReady || _tabs.Tabs.Any(t => t.Id == id && t.Private) || _pages.CoreOf(id) is not { } core || !IsWeb(core.Source) || core.Source.StartsWith("https://start.sol/")) return;
         var url = core.Source;
         var text = selected?.Text ?? "";
         var truncated = text.Length > AiLimit;
@@ -129,9 +129,7 @@ public sealed partial class BrowserController
     }
     private void CopyAi()
     {
-        if (!AiDone) return;
-        var data = new Windows.ApplicationModel.DataTransfer.DataPackage(); data.SetText(_aiResult.ToString());
-        Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(data);
+        if (AiDone) Copy(_aiResult.ToString());
     }
     private void NoteAi()
     {
@@ -140,7 +138,7 @@ public sealed partial class BrowserController
         var url = context.Url;
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") || uri.UserInfo.Length > 0 || url.Length > 4096) url = "";
         _noteDraft = new("", context.Title, _aiResult.ToString(), url, DateTimeOffset.UtcNow);
-        OpenNotes(450, 60); PublishNotes();
+        OpenNotes(); PublishNotes();
     }
     private object AiState() => new
     {

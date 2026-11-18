@@ -153,22 +153,22 @@ public sealed class CaptureService(Window window, Action<string>? post = null, F
     private async Task<(byte[] Pixels, uint Width, uint Height)> GrabAsync()
     {
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
-        if (!GetClientRect(hwnd, out var client) || client.Right < 1 || client.Bottom < 1) throw new InvalidOperationException("Fenêtre indisponible.");
+        if (!Win32Interop.GetClientRect(hwnd, out var client) || client.Right < 1 || client.Bottom < 1) throw new InvalidOperationException("Fenêtre indisponible.");
         return await Task.Run(() =>
         {
-            var info = new BitmapInfoHeader { Size = 40, Width = client.Right, Height = -client.Bottom, Planes = 1, BitCount = 32 };
-            var dc = CreateCompatibleDC(0);
-            var bitmap = CreateDIBSection(dc, ref info, 0, out var bits, 0, 0);
-            var previous = SelectObject(dc, bitmap);
+            var info = new Win32Interop.BitmapInfoHeader { Size = 40, Width = client.Right, Height = -client.Bottom, Planes = 1, BitCount = 32 };
+            var dc = Win32Interop.CreateCompatibleDC(0);
+            var bitmap = Win32Interop.CreateDIBSection(dc, ref info, 0, out var bits, 0, 0);
+            var previous = Win32Interop.SelectObject(dc, bitmap);
             try
             {
-                if (bitmap == 0 || !PrintWindow(hwnd, dc, 3)) throw new InvalidOperationException("Fenêtre indisponible.");
+                if (bitmap == 0 || !Win32Interop.PrintWindow(hwnd, dc, 3)) throw new InvalidOperationException("Fenêtre indisponible.");
                 var pixels = new byte[client.Right * client.Bottom * 4];
                 Marshal.Copy(bits, pixels, 0, pixels.Length);
                 for (var i = 3; i < pixels.Length; i += 4) pixels[i] = 255; // GDI ne renseigne pas l'opacité
                 return (pixels, (uint)client.Right, (uint)client.Bottom);
             }
-            finally { SelectObject(dc, previous); DeleteObject(bitmap); DeleteDC(dc); }
+            finally { Win32Interop.SelectObject(dc, previous); Win32Interop.DeleteObject(bitmap); Win32Interop.DeleteDC(dc); }
         });
     }
 
@@ -276,19 +276,4 @@ public sealed class CaptureService(Window window, Action<string>? post = null, F
         using var doc = JsonDocument.Parse(json);
         return doc.RootElement.GetProperty("result").TryGetProperty("value", out var value) ? value.Clone() : null;
     }
-
-    [StructLayout(LayoutKind.Sequential)] private struct Rect { public int Left, Top, Right, Bottom; }
-    [StructLayout(LayoutKind.Sequential)]
-    private struct BitmapInfoHeader
-    {
-        public uint Size; public int Width, Height; public ushort Planes, BitCount;
-        public uint Compression, SizeImage; public int XPelsPerMeter, YPelsPerMeter; public uint ClrUsed, ClrImportant;
-    }
-    [DllImport("user32.dll")] private static extern bool GetClientRect(nint hwnd, out Rect rect);
-    [DllImport("user32.dll")] private static extern bool PrintWindow(nint hwnd, nint dc, uint flags);
-    [DllImport("gdi32.dll")] private static extern nint CreateCompatibleDC(nint dc);
-    [DllImport("gdi32.dll")] private static extern nint CreateDIBSection(nint dc, ref BitmapInfoHeader info, uint usage, out nint bits, nint section, uint offset);
-    [DllImport("gdi32.dll")] private static extern nint SelectObject(nint dc, nint item);
-    [DllImport("gdi32.dll")] private static extern bool DeleteObject(nint item);
-    [DllImport("gdi32.dll")] private static extern bool DeleteDC(nint dc);
 }

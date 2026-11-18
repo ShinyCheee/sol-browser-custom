@@ -23,7 +23,6 @@ public sealed class SegmentPlan
     public List<Segment> Segments { get; init; } = [];
 
     public long Done => Segments.Sum(s => Math.Min(s.Position, s.End + 1) - s.Start);
-    public bool Complete => Segments.All(s => s.Remaining == 0);
 
     public static SegmentPlan Split(long total, int parts, string? validator)
     {

@@ -1,6 +1,15 @@
 # Register once with a project runner token saved locally, then run without administrator rights.
-param([string]$RunnerDir = 'D:\dev\gitlab-runner')
+param([string]$RunnerDir)
 $ErrorActionPreference = 'Stop'
+if (-not $RunnerDir) {
+    $drive = Split-Path (if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }) -Qualifier
+    $localRunner = Join-Path $drive 'dev\gitlab-runner'
+    $RunnerDir = if ((Test-Path -LiteralPath $localRunner) -or -not (Test-Path -LiteralPath 'D:\dev\gitlab-runner')) {
+        $localRunner
+    } else {
+        'D:\dev\gitlab-runner'
+    }
+}
 $runnerExe = Join-Path $RunnerDir 'gitlab-runner.exe'
 $runnerConfig = Join-Path $RunnerDir 'config.toml'
 $tokenFile = Join-Path $RunnerDir 'runner-token.txt'

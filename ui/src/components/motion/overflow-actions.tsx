@@ -19,6 +19,7 @@ import {
 } from "react";
 import { EASE_OUT } from "@/lib/ease";
 import { useHoverCapable } from "@/lib/hooks/use-hover-capable";
+import { t } from "@/i18n";
 import { cn } from "@/lib/utils";
 export type OverflowActionsSize = "sm" | "md";
 export type OverflowActionItem = {
@@ -131,8 +132,8 @@ export function OverflowActions({
   onAction,
   collapseOnAction = false,
   size = "md",
-  openLabel = "Show extra actions",
-  closeLabel = "Hide extra actions",
+  openLabel = t("Afficher plus d’actions", "Show extra actions"),
+  closeLabel = t("Masquer les actions supplémentaires", "Hide extra actions"),
   className,
   classNames,
 }: OverflowActionsProps) {

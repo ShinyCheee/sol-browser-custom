@@ -13,6 +13,7 @@ public sealed class DockHost(Grid frame, WebView2 view, UiBridge bridge, Func<Ta
     private bool _started;
     private string? _last;
     private bool _tracksBounds;
+    private bool _suppressed;
     private double _requestedWidth, _requestedHeight;
     // Un contenu en attente d'affichage garde la vue éveillée : endormie, elle ne pourrait ni le dessiner ni donner sa taille.
     private UiViewRest? _resting;
@@ -28,13 +29,14 @@ public sealed class DockHost(Grid frame, WebView2 view, UiBridge bridge, Func<Ta
         {
             _rest.Wake();
             bridge.Post(json);
+            if (_suppressed) return;
             // Une nouvelle carte de même hauteur ne déclenche pas forcément le ResizeObserver.
             if (!Visible && _requestedWidth > 0 && _requestedHeight > 0) SetSize(_requestedWidth, _requestedHeight);
             else if (frame.Visibility != Visibility.Visible) Warm();
             return;
         }
         _started = true;
-        Warm();
+        if (!_suppressed) Warm();
         _ = InitializeAsync(); // l'encart demandera son contenu une fois prêt (voir Ready)
     }
 
@@ -68,6 +70,7 @@ public sealed class DockHost(Grid frame, WebView2 view, UiBridge bridge, Func<Ta
     {
         if (_last is null || !double.IsFinite(width) || !double.IsFinite(height) || width <= 0 || height <= 0) return;
         (_requestedWidth, _requestedHeight) = (width, height);
+        if (_suppressed) return;
         var parent = frame.Parent as FrameworkElement;
         if (!_tracksBounds && parent is not null)
         {
@@ -84,6 +87,14 @@ public sealed class DockHost(Grid frame, WebView2 view, UiBridge bridge, Func<Ta
         frame.Visibility = Visibility.Visible;
         frame.UpdateLayout();
         CornerClip.Set(view, 16 * (float)(UiBridge.Settings?.UiFactor ?? 0.92)); // beUI Card rounded-2xl.
+    }
+
+    public void SetSuppressed(bool suppressed)
+    {
+        if (_suppressed == suppressed) return;
+        _suppressed = suppressed;
+        if (suppressed) frame.Visibility = Visibility.Collapsed;
+        else if (_last is not null && _requestedWidth > 0 && _requestedHeight > 0) SetSize(_requestedWidth, _requestedHeight);
     }
 
     public void Hide()

@@ -55,6 +55,7 @@ public class CommandParserTests
     {
         Assert.NotNull(CommandParser.Parse("""{"type":"ui.ready"}"""));
         Assert.NotNull(CommandParser.Parse("""{"type":"window.drag"}"""));
+        Assert.Equal(new Command("sidebar.toggle"), CommandParser.Parse("""{"type":"sidebar.toggle"}"""));
     }
 
     [Fact]

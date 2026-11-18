@@ -19,6 +19,7 @@ import {
   SPRING_LAYOUT,
   SPRING_SWAP,
 } from "@/lib/ease";
+import { t, useLang } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { ActivityRow } from "./activity-row";
 import type {
@@ -81,11 +82,11 @@ function getContentType(items: AgentActivityItem[]): AgentActivityContentType {
 }
 
 function getActiveLabel(type: AgentActivityContentType) {
-  if (type === "search") return "Searching the web…";
-  if (type === "tool") return "Running tools…";
-  if (type === "trace") return "Working through the run…";
-  if (type === "mixed") return "Working through it…";
-  return "Thinking…";
+  if (type === "search") return t("Recherche sur le web…", "Searching the web…");
+  if (type === "tool") return t("Exécution d’outils…", "Running tools…");
+  if (type === "trace") return t("Exécution en cours…", "Working through the run…");
+  if (type === "mixed") return t("Traitement en cours…", "Working through it…");
+  return t("Réflexion…", "Thinking…");
 }
 
 function getSummary(
@@ -96,24 +97,31 @@ function getSummary(
   if (type === "step" || type === "text") {
     return (
       <>
-        Thought for <span className="tabular-nums">{formatDuration(duration)}</span>
+        {t("Réflexion pendant", "Thought for")} <span className="tabular-nums">{formatDuration(duration)}</span>
       </>
     );
   }
-  if (type === "search") return "Searched the web";
+  if (type === "search") return t("Recherche effectuée", "Searched the web");
   if (type === "tool") {
-    return `Ran ${items.length} ${items.length === 1 ? "tool" : "tools"}`;
+    return t(
+      `${items.length} outil${items.length > 1 ? "s" : ""} exécuté${items.length > 1 ? "s" : ""}`,
+      `Ran ${items.length} ${items.length === 1 ? "tool" : "tools"}`,
+    );
   }
   if (type === "trace") {
     const messages = items.filter(
-      (item) =>
-        item.type === "trace" &&
-        (item.kind === "thinking" || item.kind === "message"),
+      (item) => item.type === "trace" && (item.kind === "thinking" || item.kind === "message"),
     ).length;
     const tools = items.length - messages;
-    return `${tools} ${tools === 1 ? "tool call" : "tool calls"}, ${messages} ${messages === 1 ? "message" : "messages"}`;
+    return t(
+      `${tools} action${tools > 1 ? "s" : ""}, ${messages} message${messages > 1 ? "s" : ""}`,
+      `${tools} ${tools === 1 ? "tool call" : "tool calls"}, ${messages} ${messages === 1 ? "message" : "messages"}`,
+    );
   }
-  return `Completed ${items.length} ${items.length === 1 ? "step" : "steps"}`;
+  return t(
+    `${items.length} étape${items.length > 1 ? "s" : ""} terminée${items.length > 1 ? "s" : ""}`,
+    `Completed ${items.length} ${items.length === 1 ? "step" : "steps"}`,
+  );
 }
 
 export function AgentActivity({
@@ -133,6 +141,7 @@ export function AgentActivity({
   className,
   contentClassName,
 }: AgentActivityProps) {
+  useLang();
   const reduce = useReducedMotion() ?? false;
   const baseId = useId();
   const triggerId = `${baseId}-trigger`;

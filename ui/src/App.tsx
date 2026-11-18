@@ -1,7 +1,7 @@
 import { EyeTracker } from '@/components/bencho/EyeTracker';
 import {WindowControls,useWindowDrag} from './WindowControls';
 import { useEffect, useState } from 'react';
-import { isStartPage, onState, send, type State } from './bridge';
+import { anchorBox, isStartPage, onState, send, type State } from './bridge';
 import { t, useLang } from './i18n';
 import AddressPill from './AddressPill';
 import { Icon, SidebarIcon } from './Icons';
@@ -83,13 +83,13 @@ export default function App({sidebarOpen=true}:{sidebarOpen?:boolean}) {
       <div className="topbar-right pill-surface" {...windowDrag}>
         {activeTab && !isStartPage(activeTab.url) && activeTab.url !== 'https://start.sol/index.html#notes' && /^https?:\/\//.test(activeTab.url) &&
           <button data-action="translation.open" className={`pill-icon-btn${activeTab.translated ? ' translation-active' : ''}`} aria-label={t('Traduire la page', 'Translate page')} aria-pressed={!!activeTab.translated} title={activeTab.translated ? t('Traduction · voir l’original', 'Translation · view original') : t('Traduire la page', 'Translate page')}
-            onClick={e => { const box = e.currentTarget.getBoundingClientRect(); send({ type: 'translation.open', id: activeTab.id, x: box.right, y: box.bottom + 6 }); }}>
+            onClick={e => { const box = anchorBox(e.currentTarget); send({ type: 'translation.open', id: activeTab.id, x: box.right, y: box.bottom + 6 }); }}>
             <Icon d="M2 4h7M5.5 2v2M3 4c.5 3 2 5 5 6M8 4c-.5 3-2 5-5 6M9 13l2.5-7L14 13M10 11h3" />
           </button>}
         {activeTab?.storeDetail && !state.privateMode &&
           <button className="store-install" onClick={() => send({ type:'extension.current' })}>{activeTab.storeInstalled ? t('Installée', 'Installed') : t('Ajouter à Sol', 'Add to Sol')}</button>}
         {state.extensions?.map(extension => <button key={extension.id} className="pill-icon-btn pinned-extension" aria-label={extension.name} title={extension.name}
-          onClick={e => { const box = e.currentTarget.getBoundingClientRect(); send({type:'extension.show', id:extension.id, x:box.right, y:box.bottom+6}); }}>
+          onClick={e => { const box = anchorBox(e.currentTarget); send({type:'extension.show', id:extension.id, x:box.right, y:box.bottom+6}); }}>
           {extension.icon ? <img src={extension.icon} alt="" /> : <span>{extension.name.slice(0,1)}</span>}
         </button>)}
         {state.aiAvailable && <button className="pill-icon-btn" aria-label={t('Discuter avec Sol AI', 'Chat with Sol AI')} title={t('Discuter avec Sol AI', 'Chat with Sol AI')} aria-pressed={!!state.chatOpen} onClick={() => send({ type: 'chat.toggle' })}>
@@ -114,7 +114,7 @@ export default function App({sidebarOpen=true}:{sidebarOpen?:boolean}) {
           data-action="extensions.menu"
           title={t('Extensions', 'Extensions')}
           onClick={e => {
-            const box = e.currentTarget.getBoundingClientRect();
+            const box = anchorBox(e.currentTarget);
             send({ type: 'extensions.menu', x: box.right, y: box.bottom + 6 });
           }}
         >
@@ -127,7 +127,7 @@ export default function App({sidebarOpen=true}:{sidebarOpen?:boolean}) {
           aria-label={t(`Profil : ${state.profile}`, `Profile: ${state.profile}`)}
           title={t(`Profil : ${state.profile}`, `Profile: ${state.profile}`)}
           onClick={e => {
-            const box = e.currentTarget.getBoundingClientRect();
+            const box = anchorBox(e.currentTarget);
             send({ type: 'profile.menu', x: box.right, y: box.bottom + 6 });
           }}
         >
@@ -139,7 +139,7 @@ export default function App({sidebarOpen=true}:{sidebarOpen?:boolean}) {
           data-action="settings.open"
           title={t('Réglages', 'Settings')}
           onClick={e => {
-            const box = e.currentTarget.getBoundingClientRect();
+            const box = anchorBox(e.currentTarget);
             send({ type: 'settings.open', x: box.right, y: box.bottom + 6 });
           }}
         >

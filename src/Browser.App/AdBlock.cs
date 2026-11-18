@@ -11,8 +11,6 @@ public static class AdBlock
     private static async Task<CoreWebView2Environment> CreateEnvironmentAsync() =>
         await CoreWebView2Environment.CreateWithOptionsAsync(null, Environment.GetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER"),
             new CoreWebView2EnvironmentOptions { AreBrowserExtensionsEnabled = true });
-    // Compatibility with extension management: no built-in blocker is installed anymore.
-    public static string? ExtensionId => null;
     public static async Task RemoveBundledAsync(CoreWebView2Profile profile)
     {
         if (!File.Exists(Path.Combine(AppPaths.DataDir, "ublock-path.txt"))) return;

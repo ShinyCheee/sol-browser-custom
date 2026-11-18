@@ -10,6 +10,7 @@ export function readAttachment(file: File) {
   if (file.size > MAX_FILE_BYTES) { send({ type: 'chat.file', id: name, input: '' }); return; }
   const reader = new FileReader();
   reader.onload = () => send({ type: 'chat.file', id: name, input: String(reader.result) });
+  reader.onerror = () => send({ type: 'chat.file', id: name, input: '' });
   reader.readAsDataURL(file);
 }
 export function AttachmentActions({ disabled }: { disabled: boolean }) {

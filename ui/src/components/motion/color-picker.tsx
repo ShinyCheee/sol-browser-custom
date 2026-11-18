@@ -45,12 +45,6 @@ export {
   rgbaToHsva,
   useColorPicker,
 } from "./color-picker-math";
-export {
-  ColorPickerContent,
-  type ColorPickerContentProps,
-  ColorPickerTrigger,
-  type ColorPickerTriggerProps,
-} from "./color-picker-popover";
 
 export interface ColorPickerProps
   extends Omit<ComponentPropsWithRef<"fieldset">, "onChange" | "defaultValue"> {

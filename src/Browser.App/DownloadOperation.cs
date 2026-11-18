@@ -14,6 +14,7 @@ internal sealed class DownloadOperation
     public DownloadOperation(CoreWebView2DownloadOperation native) => _native = native;
     /// <summary>Transfert mené par le moteur : il dépend de la vue de l'onglet qui l'a lancé.</summary>
     public bool Native => _native is not null;
+    public IBackgroundDownload? Job => _video;
     public DownloadOperation(IBackgroundDownload video) => _video = video;
     public DownloadOperation(SavedDownload saved) => _saved = saved;
     public SavedDownload Save() => new(ResultFilePath, Uri, BytesReceived, TotalBytesToReceive, State == CoreWebView2DownloadState.Completed);

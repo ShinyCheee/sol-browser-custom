@@ -42,7 +42,10 @@ public sealed class TabSessions(string path)
     {
         // Un fichier vide volontairement conserve la suppression des sessions proposées.
         if (File.Exists(path)) return;
-        foreach (var name in new[] { "Admin", "User", "Invité" }) Create(name);
+        _ = Items;
+        foreach (var name in new[] { "Admin", "User", "Invité" })
+            if (_items!.Count < 30) _items.Add(new(Guid.NewGuid().ToString("N"), name));
+        Save();
     }
     public string? Create(string name, string site = "")
     {

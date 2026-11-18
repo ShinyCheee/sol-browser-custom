@@ -79,9 +79,15 @@ public sealed partial class SolVoiceSession : IDisposable
             Text = text; Mode = "thinking"; Changed?.Invoke(); Recognized?.Invoke(text);
         }
         catch (OperationCanceledException) { if (_turn.Accepts(generation)) Fail("voice-slow"); }
-        catch (Exception e) when (e is IOException or InvalidOperationException or UnauthorizedAccessException or NAudio.MmException or System.ComponentModel.Win32Exception or Microsoft.ML.OnnxRuntime.OnnxRuntimeException)
+        catch (Exception e) when (e is IOException or InvalidOperationException or UnauthorizedAccessException or NAudio.MmException or System.ComponentModel.Win32Exception or Microsoft.ML.OnnxRuntime.OnnxRuntimeException or TypeInitializationException or DllNotFoundException)
         {
-            if (_turn.Accepts(generation)) Fail(e.Message is "voice-busy" or "voice-timeout" or "no-speech" or "voice-slow" ? e.Message : Mode == "listening" ? "microphone" : "recognition");
+            if (_turn.Accepts(generation))
+            {
+                var reason = e.Message == "voice-invalid-input" ? "no-speech"
+                    : e.Message is "voice-busy" or "voice-timeout" or "no-speech" or "voice-slow" ? e.Message
+                    : Mode == "listening" ? "microphone" : "recognition";
+                Fail(reason);
+            }
         }
         finally
         {
@@ -130,6 +136,6 @@ public sealed partial class SolVoiceSession : IDisposable
     public void Dispose()
     {
         if (_disposed) return;
-        _disposed = true; _installation?.Cancel(); Stop(); _worker.Dispose();
+        _disposed = true; _checking?.Cancel(); _installation?.Cancel(); Stop(); _worker.Dispose();
     }
 }

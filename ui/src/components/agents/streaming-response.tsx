@@ -3,7 +3,6 @@
 
 import {
   Check,
-  ChevronDown,
   Copy,
   RotateCcw,
   ThumbsDown,
@@ -14,17 +13,11 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
-  useId,
   useRef,
   useState,
 } from "react";
-import {
-  type CitationItem,
-  CitationList,
-  CitationStack,
-} from "@/components/agents/citations";
-import { AgentDisclosure } from "@/components/agents/agent-disclosure";
-import { EASE_OUT, SPRING_PRESS, SPRING_SWAP } from "@/lib/ease";
+import { t, useLang } from "@/i18n";
+import { EASE_OUT, SPRING_PRESS } from "@/lib/ease";
 import { cn } from "@/lib/utils";
 
 export type StreamingResponseStatus = "streaming" | "complete" | "error";
@@ -39,12 +32,6 @@ export interface StreamingResponseProps {
   /** Overrides the built-in clipboard action. */
   onCopy?: () => void | Promise<void>;
   onRetry?: () => void;
-  /** Optional sources shown as a compact footer disclosure after streaming. */
-  sources?: CitationItem[];
-  sourcesOpen?: boolean;
-  defaultSourcesOpen?: boolean;
-  onSourcesOpenChange?: (open: boolean) => void;
-  sourceIdPrefix?: string;
   feedback?: StreamingResponseFeedback;
   defaultFeedback?: StreamingResponseFeedback;
   onFeedbackChange?: (feedback: StreamingResponseFeedback) => void;
@@ -60,11 +47,13 @@ export interface StreamingResponseProps {
 function ResponseAction({
   label,
   active = false,
+  toggle = false,
   onClick,
   children,
 }: {
   label: string;
   active?: boolean;
+  toggle?: boolean;
   onClick: () => void;
   children: ReactNode;
 }) {
@@ -75,7 +64,7 @@ function ResponseAction({
       type="button"
       aria-label={label}
       title={label}
-      aria-pressed={label === "Helpful" || label === "Not helpful" ? active : undefined}
+      aria-pressed={toggle ? active : undefined}
       onClick={onClick}
       whileTap={reduce ? undefined : { scale: 0.9 }}
       transition={SPRING_PRESS}
@@ -95,11 +84,6 @@ export function StreamingResponse({
   copyText,
   onCopy,
   onRetry,
-  sources = [],
-  sourcesOpen,
-  defaultSourcesOpen = false,
-  onSourcesOpenChange,
-  sourceIdPrefix,
   feedback,
   defaultFeedback = null,
   onFeedbackChange,
@@ -109,25 +93,18 @@ export function StreamingResponse({
   contentClassName,
   actionsClassName,
 }: StreamingResponseProps) {
+  useLang();
   const reduce = useReducedMotion() ?? false;
-  const baseId = useId();
   const [copied, setCopied] = useState(false);
   const [internalFeedback, setInternalFeedback] =
     useState<StreamingResponseFeedback>(defaultFeedback);
-  const [internalSourcesOpen, setInternalSourcesOpen] =
-    useState(defaultSourcesOpen);
   const copyTimer = useRef<number | undefined>(undefined);
   const currentFeedback = feedback ?? internalFeedback;
-  const currentSourcesOpen = sourcesOpen ?? internalSourcesOpen;
   const streaming = status === "streaming";
   const complete = status === "complete";
   const canCopy = Boolean(copyText || onCopy);
-  const hasSources = sources.length > 0;
   const shouldShowActions =
-    showActions && !streaming && (canCopy || onRetry || complete || hasSources);
-  const sourcesContentId = `${baseId}-sources`;
-  const resolvedSourcePrefix =
-    sourceIdPrefix ?? `response-source-${baseId.replace(/:/g, "")}`;
+    showActions && !streaming && (canCopy || onRetry || complete);
 
   useEffect(
     () => () => {
@@ -150,14 +127,6 @@ export function StreamingResponse({
     if (feedback === undefined) setInternalFeedback(value);
     onFeedbackChange?.(value);
   };
-
-  const setSourcesOpen = useCallback(
-    (next: boolean) => {
-      if (sourcesOpen === undefined) setInternalSourcesOpen(next);
-      onSourcesOpenChange?.(next);
-    },
-    [onSourcesOpenChange, sourcesOpen],
-  );
 
   return (
     <div
@@ -187,7 +156,7 @@ export function StreamingResponse({
             <div className={cn("flex items-center gap-0.5", actionsClassName)}>
               {canCopy ? (
                 <ResponseAction
-                  label={copied ? "Copied" : "Copy response"}
+                  label={copied ? t("Copié", "Copied") : t("Copier la réponse", "Copy response")}
                   onClick={handleCopy}
                 >
                   {copied ? (
@@ -198,21 +167,26 @@ export function StreamingResponse({
                 </ResponseAction>
               ) : null}
               {onRetry ? (
-                <ResponseAction label="Retry response" onClick={onRetry}>
+                <ResponseAction
+                  label={t("Régénérer la réponse", "Retry response")}
+                  onClick={onRetry}
+                >
                   <RotateCcw className="size-3.5" />
                 </ResponseAction>
               ) : null}
               {complete ? (
                 <>
                   <ResponseAction
-                    label="Helpful"
+                    label={t("Utile", "Helpful")}
+                    toggle
                     active={currentFeedback === "up"}
                     onClick={() => setFeedback("up")}
                   >
                     <ThumbsUp className="size-3.5" />
                   </ResponseAction>
                   <ResponseAction
-                    label="Not helpful"
+                    label={t("Pas utile", "Not helpful")}
+                    toggle
                     active={currentFeedback === "down"}
                     onClick={() => setFeedback("down")}
                   >
@@ -220,42 +194,7 @@ export function StreamingResponse({
                   </ResponseAction>
                 </>
               ) : null}
-              {hasSources ? (
-                <button
-                  type="button"
-                  aria-expanded={currentSourcesOpen}
-                  aria-controls={sourcesContentId}
-                  onClick={() => setSourcesOpen(!currentSourcesOpen)}
-                  className="group ml-1 inline-flex min-h-7 items-center gap-2 rounded-md px-1.5 text-xs text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <CitationStack citations={sources} />
-                  <span className="tabular-nums">
-                    {sources.length} {sources.length === 1 ? "source" : "sources"}
-                  </span>
-                  <motion.span
-                    aria-hidden="true"
-                    animate={{ rotate: currentSourcesOpen ? 180 : 0 }}
-                    transition={reduce ? { duration: 0 } : SPRING_SWAP}
-                    className="text-muted-foreground/50 group-hover:text-muted-foreground"
-                  >
-                    <ChevronDown className="size-3" />
-                  </motion.span>
-                </button>
-              ) : null}
             </div>
-
-            {hasSources ? (
-              <AgentDisclosure
-                id={sourcesContentId}
-                open={currentSourcesOpen}
-              >
-                <CitationList
-                  citations={sources}
-                  idPrefix={resolvedSourcePrefix}
-                  className="mt-2 rounded-xl bg-muted p-2"
-                />
-              </AgentDisclosure>
-            ) : null}
           </motion.div>
         ) : null}
       </AnimatePresence>

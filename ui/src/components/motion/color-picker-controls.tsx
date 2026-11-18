@@ -5,6 +5,7 @@ import { AnimatePresence, type MotionValue, motion, type Transition, useReducedM
 import { type ComponentPropsWithRef, type RefObject, useContext } from "react";
 import { EASE_OUT, SPRING_PRESS } from "@/lib/ease";
 import { TOUCH_GESTURE_CLASS } from "@/lib/touch";
+import { t } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { AREA_RADIUS, CHECKERBOARD, keyStep, MORPH, MorphContext, useDrag, useGlide, usePickerContext } from "./color-picker-math";
 
@@ -74,7 +75,7 @@ export interface ColorPickerAreaProps extends Omit<ComponentPropsWithRef<"div">,
   label?: string;
 }
 
-export function ColorPickerArea({ label = "Saturation and brightness", className, style, ...props }: ColorPickerAreaProps) {
+export function ColorPickerArea({ label = t("Intensité et clarté", "Saturation and brightness"), className, style, ...props }: ColorPickerAreaProps) {
   const { id, hsva, rgba, hex, disabled, update, commit, open } = usePickerContext("ColorPickerArea");
   const morph = useContext(MorphContext);
   const reduce = useReducedMotion();
@@ -232,7 +233,7 @@ export interface ColorPickerHueProps extends Omit<ComponentPropsWithRef<"div">, 
   label?: string;
 }
 
-export function ColorPickerHue({ label = "Hue", ...props }: ColorPickerHueProps) {
+export function ColorPickerHue({ label = t("Teinte", "Hue"), ...props }: ColorPickerHueProps) {
   const { hsva, update } = usePickerContext("ColorPickerHue");
   const h = Math.round(hsva.h);
   return (
@@ -242,7 +243,7 @@ export function ColorPickerHue({ label = "Hue", ...props }: ColorPickerHueProps)
       max={360}
       onValue={(next) => update({ ...hsva, h: next })}
       label={label}
-      valueText={`${h} degrees`}
+      valueText={t(`${h} degrés`, `${h} degrees`)}
       background="linear-gradient(to right, #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%)"
       thumbColor={`hsl(${hsva.h} 100% 50%)`}
     />
@@ -253,7 +254,7 @@ export interface ColorPickerAlphaProps extends Omit<ComponentPropsWithRef<"div">
   label?: string;
 }
 
-export function ColorPickerAlpha({ label = "Opacity", ...props }: ColorPickerAlphaProps) {
+export function ColorPickerAlpha({ label = t("Opacité", "Opacity"), ...props }: ColorPickerAlphaProps) {
   const { hsva, rgba, alpha, update } = usePickerContext("ColorPickerAlpha");
   if (!alpha) return null;
   const rgb = `${rgba.r} ${rgba.g} ${rgba.b}`;

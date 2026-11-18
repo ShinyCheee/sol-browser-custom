@@ -34,7 +34,12 @@ public sealed partial class PageHost
     private const string SpellingRead = "window.__solSpelling ? window.__solSpelling.read() : 'missing'";
     public string[] SpellingLanguages => _spelling.Languages;
     public string SpellingAccent { get; set; } = "#6495ed";
-    public void StopSpelling() => _spellingTimer.Stop();
+    public void StopSpelling()
+    {
+        _spellingTimer.Stop();
+        _saver?.Stop();
+        _pipTimer?.Stop();
+    }
     /// <summary>Champs de Sol lui-même : le chat, et la barre latérale en local seulement (une adresse ne quitte pas la machine).</summary>
     public Func<IEnumerable<(string Id, CoreWebView2? Core, bool Online)>>? SpellingViews { get; set; }
 
@@ -58,13 +63,14 @@ public sealed partial class PageHost
             _spellingBusy = true;
             try
             {
+                var privateVisible = AppPaths.Private || _visible.Any(IsPrivate);
                 var targets = _visible.Select(id => (Id: id, Core: Core(id), Online: Core(id) is { } page && OnlineAllowed(id, page), Inline: false))
-                    .Concat((SpellingViews?.Invoke() ?? []).Select(v => (v.Id, v.Core, Online: v.Online && settings.SpellingOnline, Inline: true))).ToArray();
+                    .Concat((SpellingViews?.Invoke() ?? []).Select(v => (v.Id, v.Core, Online: v.Online && settings.SpellingOnline && !privateVisible, Inline: true))).ToArray();
                 foreach (var target in targets)
                 {
                     if (target.Core is null) continue;
                     try { await CheckFieldAsync(target.Id, target.Core, target.Online, target.Inline); }
-                    catch (Exception e) when (e is COMException or InvalidOperationException or JsonException or TimeoutException or ArgumentException) { _spellingCache.Remove(target.Id); }
+                    catch (Exception e) when (e is COMException or InvalidOperationException or JsonException or TimeoutException or ArgumentException or KeyNotFoundException) { _spellingCache.Remove(target.Id); }
                 }
             }
             finally { _spellingBusy = false; }
@@ -73,7 +79,7 @@ public sealed partial class PageHost
     }
 
     private bool OnlineAllowed(string id, CoreWebView2 core) =>
-        settings.SpellingOnline && !IsPrivate(id) && !TabSessions.IsSignIn(core.Source);
+        settings.SpellingOnline && !AppPaths.Private && !IsPrivate(id) && !TabSessions.IsSignIn(core.Source);
 
     private async Task CheckFieldAsync(string id, CoreWebView2 core, bool online, bool inline)
     {
@@ -121,15 +127,19 @@ public sealed partial class PageHost
     private async Task CheckOnlineAsync(SpellingField field)
     {
         field.Checking = true;
-        var issues = await _online.CheckAsync(field.Text, field.Mode);
-        field.Checking = false;
-        if (issues is null) return; // service absent ou quota atteint : la correction locale reste, nouvel essai au prochain passage
-        field.Checked = true;
-        // Un nom propre ou un mot d'une autre langue connu de Windows n'est pas une faute.
-        var hasLocal = SpellingLanguages.Length > 0;
-        field.Online = issues.Where(i => i.Kind != 0 || !hasLocal
-            || SpellingFilter.Keep(field.Text, i.Start, i.Length) && _spelling.Check(field.Text.Substring(i.Start, i.Length), field.Mode).Length > 0).ToArray();
-        field.Repaint = true;
+        try
+        {
+            var issues = await _online.CheckAsync(field.Text, field.Mode);
+            if (issues is null) return; // service absent ou quota atteint : la correction locale reste, nouvel essai au prochain passage
+            field.Checked = true;
+            // Un nom propre ou un mot d'une autre langue connu de Windows n'est pas une faute.
+            var hasLocal = SpellingLanguages.Length > 0;
+            field.Online = issues.Where(i => i.Kind != 0 || !hasLocal
+                || SpellingFilter.Keep(field.Text, i.Start, i.Length) && _spelling.Check(field.Text.Substring(i.Start, i.Length), field.Mode).Length > 0).ToArray();
+            field.Repaint = true;
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException or JsonException or KeyNotFoundException or ArgumentOutOfRangeException) { }
+        finally { field.Checking = false; }
     }
 
     private object[][] Merged(SpellingField field)

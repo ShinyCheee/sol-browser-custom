@@ -20,7 +20,7 @@ export default function SolAiTrace({ agent, busy }: { agent: AgentState; busy: b
       approveLabel={t('Autoriser', 'Allow')} rejectLabel={t('Refuser', 'Decline')} pendingLabel={t('Votre accord', 'Your approval')}
       onApprove={() => send({ type: 'ai.approve', id: agent.approval!.id, index: 1 })} onReject={() => send({ type: 'ai.approve', id: agent.approval!.id, index: 0 })} />
       <button className="pill-action ai-approval-always" onClick={() => send({ type: 'ai.approve.always', id: agent.approval!.id })}>{t('Toujours autoriser', 'Always allow')}</button>
-      <p className="ai-approval-hint">{t('Pour toutes vos demandes dans ce profil, sur tous les sites. Modifiable dans Paramètres → Sol AI.', 'For all your requests in this profile, across all sites. Change in Settings → Sol AI.')}</p>
+      <p className="ai-approval-hint">{t('Pour toutes vos demandes dans ce profil, sur tous les sites. Modifiable dans Paramètres → Sol.', 'For all your requests in this profile, across all sites. Change in Settings → Sol.')}</p>
     </div>}
   </div>;
 }

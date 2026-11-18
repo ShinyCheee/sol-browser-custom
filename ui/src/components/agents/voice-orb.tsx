@@ -18,6 +18,7 @@ import {
   useState,
 } from "react";
 import { createOrbRenderer } from "@/components/agents/voice-orb/renderer";
+import { t, useLang } from "@/i18n";
 import { SPRING_GLIDE } from "@/lib/ease";
 import { cn } from "@/lib/utils";
 
@@ -54,7 +55,12 @@ export function VoiceOrb({
   "aria-label": label,
   ...props
 }: VoiceOrbProps) {
-  const reducedMotion = useReducedMotion();
+  useLang();
+  const motionReduced = useReducedMotion();
+  const [mediaReduced, setMediaReduced] = useState(
+    () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches,
+  );
+  const reducedMotion = Boolean(motionReduced || mediaReduced);
   const canvas = useRef<HTMLCanvasElement>(null);
   const renderer = useRef<ReturnType<typeof createOrbRenderer> | null>(null);
   const [error, setError] = useState<Error | null>(null);
@@ -65,6 +71,16 @@ export function VoiceOrb({
     (value) =>
       `translate3d(0, ${-value * 2}px, 0) scale(${1 + value * 0.04}, ${1 - value * 0.018})`,
   );
+
+  useEffect(() => {
+    const query = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    if (!query) return;
+    const sync = () => setMediaReduced(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
+
   const latest = useRef({
     activity,
     analyser,
@@ -74,6 +90,7 @@ export function VoiceOrb({
     reducedMotion,
     onError,
   });
+
   useLayoutEffect(() => {
     latest.current = {
       activity,
@@ -91,7 +108,9 @@ export function VoiceOrb({
     if (reducedMotion) {
       smooth.jump(0);
       target.set(0);
-    } else target.set(value);
+    } else {
+      target.set(value);
+    }
     renderer.current?.requestDraw();
   });
 
@@ -140,19 +159,22 @@ export function VoiceOrb({
               target.set(level(Math.sqrt(sum / sample.length) * 3));
             }
           }
+          const currentActivity =
+            current.active && !current.reducedMotion
+              ? level(smooth.get())
+              : 0;
+          const currentSpeed = Number.isFinite(current.speed)
+            ? Math.max(0, current.speed)
+            : 1;
           return {
-            activity:
-              current.active && !current.reducedMotion
-                ? level(smooth.get())
-                : 0,
+            activity: currentActivity,
             colors: current.colors,
-            speed: Number.isFinite(current.speed)
-              ? Math.max(0, current.speed)
-              : 1,
+            speed: currentSpeed,
             animated:
               current.active &&
               !current.reducedMotion &&
-              (current.speed > 0 || !!current.analyser),
+              (currentSpeed > 0 || !!current.analyser),
+            lowFps: currentActivity < 0.01 && currentSpeed <= 1,
           };
         },
         failed,
@@ -169,7 +191,7 @@ export function VoiceOrb({
   return (
     <div
       {...props}
-      role="img"
+      role={label ? "img" : undefined}
       aria-label={label}
       aria-hidden={label ? undefined : true}
       data-slot="voice-orb"
@@ -179,7 +201,7 @@ export function VoiceOrb({
     >
       {error ? (
         <div className="flex size-full items-center justify-center rounded-full border border-border bg-card p-8 text-center text-xs text-muted-foreground">
-          Orb rendering unavailable
+          {t("Aperçu de l’orbe indisponible", "Orb rendering unavailable")}
         </div>
       ) : (
         <motion.div

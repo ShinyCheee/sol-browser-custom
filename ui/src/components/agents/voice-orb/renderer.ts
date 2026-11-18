@@ -3,6 +3,7 @@ export type OrbFrame = {
   colors: readonly [string, string, string];
   speed: number;
   animated: boolean;
+  lowFps?: boolean;
 };
 
 const VERTEX = `
@@ -46,22 +47,19 @@ void main() {
   float ripple = sin(angle * 3.0 + t * 2.1) * 0.55
                + sin(angle * 5.0 - t * 1.7) * 0.30
                + sin(angle * 2.0 + t) * 0.15;
-  p /= 0.91 + breath + u_activity * 0.025
-       + ripple * (0.004 + u_activity * 0.024);
+  p /= 0.91 + breath + u_activity * 0.025 + ripple * (0.004 + u_activity * 0.024);
   float r2 = dot(p, p);
   float aa = 3.0 / min(u_resolution.x, u_resolution.y);
   float alpha = 1.0 - smoothstep(1.0 - aa, 1.0, r2);
   if (alpha <= 0.0) { gl_FragColor = vec4(0.0); return; }
   vec3 normal = vec3(p, sqrt(max(0.0, 1.0 - r2)));
   vec3 flow = vec3(normal.xy * 1.65, normal.z * 1.4);
-  flow.xy += vec2(sin(normal.y * 2.6 + t), cos(normal.x * 2.3 - t * 0.8))
-             * (0.25 + u_activity * 0.22);
+  flow.xy += vec2(sin(normal.y * 2.6 + t), cos(normal.x * 2.3 - t * 0.8)) * (0.25 + u_activity * 0.22);
   vec3 warp = vec3(noise(flow + vec3(0.0, t, t * 0.3)),
                    noise(flow + vec3(4.7, -t * 0.7, t)),
                    noise(flow + vec3(t * 0.5, 9.2, -t))) - 0.5;
   float pigment = fbm(flow + warp * 1.4 + vec3(t * 0.3, -t * 0.2, t * 0.4));
-  float fold = normal.x * 0.50 + normal.y * 0.32
-             + sin(normal.y * 2.6 - t) * 0.30 + (pigment - 0.5) * 0.65;
+  float fold = normal.x * 0.50 + normal.y * 0.32 + sin(normal.y * 2.6 - t) * 0.30 + (pigment - 0.5) * 0.65;
   float shadow = smoothstep(-0.30, 0.42, fold);
   vec3 color = mix(u_dark, u_base, shadow);
   color = mix(color, u_light, smoothstep(0.40, 0.82, pigment) * 0.34);
@@ -86,15 +84,15 @@ function rgb(hex: string) {
   const normalized = short
     ? `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}`
     : hex;
-  if (!/^#[\da-f]{6}$/i.test(normalized))
+  if (!/^#[\da-f]{6}$/i.test(normalized)) {
     throw new Error("VoiceOrb colors must be #RGB or #RRGGBB hex colors.");
+  }
   const value = Number.parseInt(normalized.slice(1), 16);
-  return [
-    ((value >> 16) & 255) / 255,
-    ((value >> 8) & 255) / 255,
-    (value & 255) / 255,
-  ] as const;
+  return [((value >> 16) & 255) / 255, ((value >> 8) & 255) / 255, (value & 255) / 255] as const;
 }
+
+const UNIFORM_NAMES = ["u_resolution", "u_time", "u_activity", "u_base", "u_light", "u_dark"] as const;
+const QUAD_VERTICES = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]);
 
 /** Owns only GPU resources and draw scheduling; it never opens an audio source. */
 export function createOrbRenderer(
@@ -109,8 +107,10 @@ export function createOrbRenderer(
     powerPreference: "low-power",
   });
   if (!gl) throw new Error("WebGL is unavailable in this browser.");
+
   let disposed = false;
   let frame = 0;
+  let idleTimer = 0;
   let elapsed = 0;
   let previous = 0;
   let visible = true;
@@ -131,6 +131,7 @@ export function createOrbRenderer(
     program = null;
     shaders = [];
   };
+
   const initialize = () => {
     const compile = (type: number, source: string) => {
       const shader = gl.createShader(type);
@@ -138,10 +139,9 @@ export function createOrbRenderer(
       shaders.push(shader);
       gl.shaderSource(shader, source);
       gl.compileShader(shader);
-      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS))
-        throw new Error(
-          gl.getShaderInfoLog(shader) || "Could not compile the orb shader.",
-        );
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        throw new Error(gl.getShaderInfoLog(shader) || "Could not compile the orb shader.");
+      }
       return shader;
     };
     const vertex = compile(gl.VERTEX_SHADER, VERTEX);
@@ -151,57 +151,44 @@ export function createOrbRenderer(
     gl.attachShader(program, vertex);
     gl.attachShader(program, fragment);
     gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS))
-      throw new Error(
-        gl.getProgramInfoLog(program) || "Could not link the orb program.",
-      );
-    // biome-ignore lint/correctness/useHookAtTopLevel: WebGL's useProgram is a GPU API, not a React hook.
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      throw new Error(gl.getProgramInfoLog(program) || "Could not link the orb program.");
+    }
     gl.useProgram(program);
     buffer = gl.createBuffer();
     if (!buffer) throw new Error("Could not allocate the orb buffer.");
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]),
-      gl.STATIC_DRAW,
-    );
+    gl.bufferData(gl.ARRAY_BUFFER, QUAD_VERTICES, gl.STATIC_DRAW);
     const attribute = gl.getAttribLocation(program, "a_position");
     gl.enableVertexAttribArray(attribute);
     gl.vertexAttribPointer(attribute, 2, gl.FLOAT, false, 0, 0);
     uniforms = Object.fromEntries(
-      [
-        "u_resolution",
-        "u_time",
-        "u_activity",
-        "u_base",
-        "u_light",
-        "u_dark",
-      ].map((name) => [
-        name,
-        gl.getUniformLocation(program as WebGLProgram, name),
-      ]),
+      UNIFORM_NAMES.map((name) => [name, gl.getUniformLocation(program as WebGLProgram, name)]),
     );
     palette = null;
   };
 
   const pause = () => {
     cancelAnimationFrame(frame);
+    window.clearTimeout(idleTimer);
     frame = 0;
+    idleTimer = 0;
     previous = 0;
   };
+
   const draw = (now: number) => {
     frame = 0;
+    window.clearTimeout(idleTimer);
+    idleTimer = 0;
     if (disposed || lost || !visible || document.hidden) {
       previous = 0;
       return;
     }
     try {
       const state = read();
-      if (state.animated && previous)
-        elapsed +=
-          Math.min(0.05, (now - previous) / 1000) *
-          state.speed *
-          (1 + state.activity * 0.6);
+      if (state.animated && previous) {
+        elapsed += Math.min(0.08, (now - previous) / 1000) * state.speed * (1 + state.activity * 0.6);
+      }
       previous = state.animated ? now : 0;
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const width = Math.max(1, Math.round(size.width * dpr));
@@ -214,10 +201,7 @@ export function createOrbRenderer(
       gl.uniform2f(uniforms.u_resolution ?? null, width, height);
       gl.uniform1f(uniforms.u_time ?? null, elapsed);
       gl.uniform1f(uniforms.u_activity ?? null, state.activity);
-      if (
-        !palette ||
-        palette.some((color, index) => color !== state.colors[index])
-      ) {
+      if (!palette || palette.some((color, index) => color !== state.colors[index])) {
         const colors = state.colors.map(rgb);
         gl.uniform3fv(uniforms.u_base ?? null, colors[0]);
         gl.uniform3fv(uniforms.u_light ?? null, colors[1]);
@@ -225,21 +209,32 @@ export function createOrbRenderer(
         palette = state.colors;
       }
       gl.drawArrays(gl.TRIANGLES, 0, 6);
-      if (state.animated) frame = requestAnimationFrame(draw);
+      if (state.animated) {
+        if (state.lowFps) {
+          idleTimer = window.setTimeout(() => {
+            idleTimer = 0;
+            requestDraw();
+          }, 66);
+        } else {
+          frame = requestAnimationFrame(draw);
+        }
+      }
     } catch (error) {
       failed = true;
       pause();
       onError(error instanceof Error ? error : new Error(String(error)));
     }
   };
+
   const requestDraw = () => {
-    if (!disposed && !lost && !failed && visible && !document.hidden && !frame)
+    if (!disposed && !lost && !failed && visible && !document.hidden && !frame) {
+      window.clearTimeout(idleTimer);
+      idleTimer = 0;
       frame = requestAnimationFrame(draw);
+    }
   };
-  const visibility = () => {
-    if (document.hidden) pause();
-    else requestDraw();
-  };
+
+  const visibility = () => (document.hidden ? pause() : requestDraw());
   const contextLost = (event: Event) => {
     event.preventDefault();
     lost = true;
@@ -255,18 +250,16 @@ export function createOrbRenderer(
       onError(error instanceof Error ? error : new Error(String(error)));
     }
   };
+
   try {
     initialize();
   } catch (error) {
     destroy();
     throw error;
   }
+
   const resize = new ResizeObserver(([entry]) => {
-    if (entry)
-      size = {
-        width: entry.contentRect.width,
-        height: entry.contentRect.height,
-      };
+    if (entry) size = { width: entry.contentRect.width, height: entry.contentRect.height };
     requestDraw();
   });
   resize.observe(canvas);
@@ -280,6 +273,7 @@ export function createOrbRenderer(
   canvas.addEventListener("webglcontextrestored", contextRestored);
   document.addEventListener("visibilitychange", visibility);
   requestDraw();
+
   return {
     requestDraw,
     dispose: () => {

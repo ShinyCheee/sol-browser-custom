@@ -1,15 +1,23 @@
-using System.Runtime.InteropServices;
 using System.Text.Json;
 using Browser.Core;
 using Microsoft.UI.Windowing;
-using Microsoft.UI.Xaml;
 
 namespace Browser.App;
 
 public sealed partial class BrowserController
 {
-
     private bool _sessionReady;
+    public bool IsReady => _sessionReady && !_closingWindow;
+    public event Action? ShortcutsChanged;
+    private bool _activeUsesMedia;
+    public bool ActiveTabUsesMediaDevices => _activeUsesMedia;
+
+    private void FlushSessionSave()
+    {
+        if (_sessionSave.IsEnabled) _sessionSave.Stop();
+        SaveSession();
+    }
+
     private void SaveSession()
     {
         if (AppPaths.Private || !_sessionReady || _restoringSession) return;
@@ -118,6 +126,7 @@ public sealed partial class BrowserController
             if (activeProfile is not null) _ = RefreshPinnedExtensionsAsync();
         }
         if (_nativeZoom != UseNativeZoom) { _nativeZoom = UseNativeZoom; NativeZoomChanged?.Invoke(); }
+        UpdateMediaShortcutState();
         var starts = _tabs.Tabs.Where(t => t.Url == Settings.DefaultHomePage && !_pages.IsAsleep(t.Id)).ToList();
         if (starts.Count > 0) PostStartPages(starts);
         // Regrouper les changements ; un crash ne perd plus toute la session depuis le démarrage.
@@ -193,20 +202,11 @@ public sealed partial class BrowserController
         // La boucle de déplacement Windows commence après la sortie de l'événement WebView2.
         _window.DispatcherQueue.TryEnqueue(() =>
         {
-            var button = GetSystemMetrics(23 /* SM_SWAPBUTTON */) != 0 ? 0x02 : 0x01;
-            if (IsFullScreen || _closingWindow || (GetAsyncKeyState(button) & 0x8000) == 0 || !GetCursorPos(out var point)) return;
+            var button = Win32Interop.GetSystemMetrics(23 /* SM_SWAPBUTTON */) != 0 ? 0x02 : 0x01;
+            if (IsFullScreen || _closingWindow || (Win32Interop.GetAsyncKeyState(button) & 0x8000) == 0 || !Win32Interop.GetCursorPos(out var point)) return;
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(_window);
-            ReleaseCapture();
-            SendMessage(hwnd, 0x00A1 /* WM_NCLBUTTONDOWN */, 2 /* HTCAPTION */, (nint)((point.X & 0xffff) | ((point.Y & 0xffff) << 16)));
+            Win32Interop.ReleaseCapture();
+            Win32Interop.SendMessage(hwnd, 0x00A1 /* WM_NCLBUTTONDOWN */, 2 /* HTCAPTION */, (nint)((point.X & 0xffff) | ((point.Y & 0xffff) << 16)));
         });
     }
-
-    [StructLayout(LayoutKind.Sequential)] private struct DragPoint { public int X, Y; }
-    [DllImport("user32.dll")] private static extern bool GetCursorPos(out DragPoint point);
-    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
-    [DllImport("user32.dll")] private static extern int GetSystemMetrics(int index);
-    [DllImport("user32.dll")] private static extern bool ReleaseCapture();
-    [DllImport("user32.dll")] private static extern bool ShowWindow(nint hwnd, int command);
-    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(nint hwnd);
-    [DllImport("user32.dll")] private static extern nint SendMessage(nint hwnd, uint msg, nint wParam, nint lParam);
 }

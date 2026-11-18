@@ -170,7 +170,8 @@ public sealed partial class BrowserController
             case "update.check": _updateDismissed = false; _ = Program.CheckForUpdateAsync(); return true;
             case "update.restart":
                 if (Program.Update is not { Ready: true }) return true;
-                SaveSession();
+                FlushSessionSave();
+                CloseVoice(release: true);
                 JsonFileStore.Save(AppPaths.Settings, _settings);
                 Program.RestartToUpdate();
                 return true;

@@ -28,15 +28,15 @@ public sealed partial class MainWindow
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
         timer.Tick += (_, _) =>
         {
-            var button = GetSystemMetrics(23 /* SM_SWAPBUTTON */) != 0 ? 0x02 : 0x01;
-            if ((GetAsyncKeyState(button) & 0x8000) == 0)
+            var button = Win32Interop.GetSystemMetrics(23 /* SM_SWAPBUTTON */) != 0 ? 0x02 : 0x01;
+            if ((Win32Interop.GetAsyncKeyState(button) & 0x8000) == 0)
             {
                 timer.Stop();
                 settings.SidebarWidth = _sidebar!.Width / settings.UiFactor;
                 JsonFileStore.Save(AppPaths.Settings, settings);
                 return;
             }
-            if (!GetCursorPos(out var point) || !ScreenToClient(_hwnd, ref point)) return;
+            if (!Win32Interop.GetCursorPos(out var point) || !Win32Interop.ScreenToClient(_hwnd, ref point)) return;
             // Le curseur est en pixels de l'écran, la carte en unités d'affichage.
             _sidebar!.Resize(point.X / Root.XamlRoot.RasterizationScale + 3);
         };
@@ -47,7 +47,7 @@ public sealed partial class MainWindow
         {
             e.Handled = true;
             var now = Environment.TickCount64;
-            var doubleClick = now - lastPress <= GetDoubleClickTime();
+            var doubleClick = now - lastPress <= Win32Interop.GetDoubleClickTime();
             lastPress = doubleClick ? 0 : now;
             if (!doubleClick) { timer.Start(); return; }
             timer.Stop();
@@ -55,9 +55,8 @@ public sealed partial class MainWindow
             settings.SidebarWidth = _sidebar.Width / settings.UiFactor;
             JsonFileStore.Save(AppPaths.Settings, settings);
         };
+        Closed += (_, _) => timer.Stop();
     }
-
-    [DllImport("user32.dll")] private static extern uint GetDoubleClickTime();
 
     // Bord haut du panneau du bas : même scrutation de la souris ; la hauteur choisie est enregistrée au relâchement.
     private void WirePanelGrip(PanelHost panel, Settings settings)
@@ -65,14 +64,14 @@ public sealed partial class MainWindow
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
         timer.Tick += (_, _) =>
         {
-            var button = GetSystemMetrics(23 /* SM_SWAPBUTTON */) != 0 ? 0x02 : 0x01;
-            if ((GetAsyncKeyState(button) & 0x8000) == 0)
+            var button = Win32Interop.GetSystemMetrics(23 /* SM_SWAPBUTTON */) != 0 ? 0x02 : 0x01;
+            if ((Win32Interop.GetAsyncKeyState(button) & 0x8000) == 0)
             {
                 timer.Stop();
                 JsonFileStore.Save(AppPaths.Settings, settings);
                 return;
             }
-            if (!GetCursorPos(out var point) || !ScreenToClient(_hwnd, ref point) || !GetClientRect(_hwnd, out var rect)) return;
+            if (!Win32Interop.GetCursorPos(out var point) || !Win32Interop.ScreenToClient(_hwnd, ref point) || !Win32Interop.GetClientRect(_hwnd, out var rect)) return;
             // Le curseur est en pixels de l'écran, le panneau en unités d'affichage ; les pages gardent au moins 160 de haut.
             var scale = Root.XamlRoot.RasterizationScale;
             panel.Resize(Math.Min((rect.Bottom - point.Y) / scale + 4, rect.Bottom / scale - 52 - 160));
@@ -82,6 +81,7 @@ public sealed partial class MainWindow
             e.Handled = true;
             timer.Start();
         };
+        Closed += (_, _) => timer.Stop();
     }
 
     private DispatcherTimer CreateDividerTimer()
@@ -90,9 +90,9 @@ public sealed partial class MainWindow
         timer.Tick += (_, _) =>
         {
             // Bouton principal : le droit si l'utilisateur a inversé les boutons de sa souris.
-            var button = GetSystemMetrics(23 /* SM_SWAPBUTTON */) != 0 ? 0x02 : 0x01;
-            if ((GetAsyncKeyState(button) & 0x8000) == 0) { timer.Stop(); return; }
-            if (!GetCursorPos(out var point) || !ScreenToClient(_hwnd, ref point) || !GetClientRect(_hwnd, out var rect)) return;
+            var button = Win32Interop.GetSystemMetrics(23 /* SM_SWAPBUTTON */) != 0 ? 0x02 : 0x01;
+            if ((Win32Interop.GetAsyncKeyState(button) & 0x8000) == 0) { timer.Stop(); return; }
+            if (!Win32Interop.GetCursorPos(out var point) || !Win32Interop.ScreenToClient(_hwnd, ref point) || !Win32Interop.GetClientRect(_hwnd, out var rect)) return;
 
             var scale = Root.XamlRoot.RasterizationScale;
             var sideWidth = SidebarColumn.ActualWidth * scale;

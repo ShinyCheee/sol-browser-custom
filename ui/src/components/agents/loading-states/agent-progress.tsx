@@ -3,6 +3,7 @@
 
 import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useState } from "react";
+import { t, useLang } from "@/i18n";
 import { EASE_IN_OUT } from "@/lib/ease";
 import { cn } from "@/lib/utils";
 
@@ -38,12 +39,14 @@ function formatElapsed(totalSeconds: number) {
 }
 
 export function AgentProgress({
-  label = "Churning",
+  label,
   elapsedSeconds,
   initialSeconds = 0,
   running = true,
   className,
 }: AgentProgressProps) {
+  useLang();
+  const resolvedLabel = label ?? t("Traitement…", "Working…");
   const reduce = useReducedMotion() ?? false;
   const [internalSeconds, setInternalSeconds] = useState(initialSeconds);
 
@@ -63,7 +66,7 @@ export function AgentProgress({
   return (
     <span
       role="status"
-      aria-label={`${label}, in progress`}
+      aria-label={t(`${resolvedLabel}, en cours`, `${resolvedLabel}, in progress`)}
       className={cn(
         "inline-flex items-center gap-3 font-mono text-sm text-muted-foreground",
         className,
@@ -94,7 +97,7 @@ export function AgentProgress({
           />
         ))}
       </span>
-      <span className="font-sans font-medium">{label}</span>
+      <span className="font-sans font-medium">{resolvedLabel}</span>
       <span
         aria-hidden="true"
         className="tabular-nums text-muted-foreground/70"

@@ -13,6 +13,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { t } from "@/i18n";
 import { EASE_OUT, SPRING_LAYOUT } from "@/lib/ease";
 import { cn } from "@/lib/utils";
 import type {
@@ -158,7 +159,7 @@ function SearchRow({ item }: { item: AgentActivitySearch }) {
             transition={transition}
             className="px-1.5 py-1 pl-8 text-muted-foreground/55"
           >
-            +{item.moreCount} more
+            +{item.moreCount} {t("autres", "more")}
           </motion.div>
         ) : null}
       </AnimatePresence>

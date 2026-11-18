@@ -6,6 +6,7 @@ public class PasswordCsvTests
     [InlineData("name,url,username,password,note\r\nExample,https://example.test/login,ada,secret,\r\n")]
     [InlineData("\uFEFFurl,username,password,httpRealm,formActionOrigin,guid,timeCreated,timeLastUsed,timePasswordChanged\nhttps://example.test/login,ada,secret,,https://example.test,{},1,1,1\n")]
     [InlineData("Title,URL,Username,Password,Notes,OTPAuth\nExample,https://example.test/login,ada,secret,,\n")]
+    [InlineData("Title,URL,User Name,Password\nExample,https://example.test/login,ada,secret\n")]
     [InlineData("folder,favorite,type,name,notes,fields,reprompt,login_uri,login_username,login_password,login_totp\n,,login,Example,,,,https://example.test/login,ada,secret,\n")]
     [InlineData("url;username;password\r\nhttps://example.test/login;ada;secret\r\n")]
     [InlineData("url\tusername\tpassword\nhttps://example.test/login\tada\tsecret\n")]

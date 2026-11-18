@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -19,6 +20,9 @@ public sealed class CloudAccount(HttpClient http, string authUrl, string apiUrl)
 {
     // Better Auth exige une origine approuvée : celle de l'interface de Sol, déclarée dans les domaines du service.
     private const string Origin = "https://ui.navigateur";
+
+    /// <summary>Plus grande sauvegarde acceptée par le service.</summary>
+    public const long MaxBytes = 256L * 1024 * 1024;
 
     /// <summary>Le cookie de session du compte.</summary>
     public async Task<string> SignInAsync(string email, string password, bool create, CancellationToken ct = default)
@@ -46,51 +50,106 @@ public sealed class CloudAccount(HttpClient http, string authUrl, string apiUrl)
     public async Task<IReadOnlyList<CloudBackup>> ListAsync(string session, CancellationToken ct = default)
     {
         using var response = await ApiAsync(session, HttpMethod.Get, "/backups", null, ct);
-        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
-        return doc.RootElement.GetProperty("backups").EnumerateArray().Select(b => new CloudBackup(
-            b.GetProperty("id").GetString()!, b.GetProperty("device").GetString()!, b.GetProperty("bytes").GetInt64(), b.GetProperty("createdAt").GetDateTimeOffset())).ToList();
+        try
+        {
+            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+            return doc.RootElement.GetProperty("backups").EnumerateArray().Select(b => new CloudBackup(
+                b.GetProperty("id").GetString() ?? throw new CloudException("server"),
+                b.GetProperty("device").GetString() ?? "",
+                b.GetProperty("bytes").GetInt64(),
+                b.GetProperty("createdAt").GetDateTimeOffset())).ToList();
+        }
+        catch (Exception e) when (e is JsonException or KeyNotFoundException or InvalidOperationException or FormatException)
+        {
+            throw new CloudException("server");
+        }
     }
-
-    /// <summary>Plus grande sauvegarde acceptée par le service.</summary>
-    public const long MaxBytes = 256L * 1024 * 1024;
 
     // La passerelle du service refuse les corps de plus de ~10 Mo : le fichier scellé part directement au stockage par une
     // adresse signée pour lui seul, puis le service le valide et l'ajoute à la liste du compte.
     public async Task<string> UploadAsync(string session, byte[] sealedFile, string device, bool replace = true, CancellationToken ct = default)
     {
         if (sealedFile.Length > MaxBytes) throw new CloudException("too-large");
-        string id, url;
-        using (var response = await ApiAsync(session, HttpMethod.Post, "/backups/uploads", Json(new { bytes = sealedFile.Length }), ct))
-        using (var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct)))
-        { id = doc.RootElement.GetProperty("id").GetString()!; url = doc.RootElement.GetProperty("url").GetString()!; }
+        string id;
+        Uri uploadUri;
+        try
+        {
+            using var response = await ApiAsync(session, HttpMethod.Post, "/backups/uploads", Json(new { bytes = sealedFile.Length }), ct);
+            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+            id = doc.RootElement.GetProperty("id").GetString() ?? throw new CloudException("server");
+            uploadUri = SafeSignedUri(doc.RootElement.GetProperty("url").GetString());
+        }
+        catch (Exception e) when (e is JsonException or KeyNotFoundException or InvalidOperationException)
+        {
+            throw new CloudException("server");
+        }
         using (var content = new ByteArrayContent(sealedFile))
         {
             content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-            using var put = await SendAsync(new HttpRequestMessage(HttpMethod.Put, url) { Content = content }, ct);
+            using var put = await SendAsync(new HttpRequestMessage(HttpMethod.Put, uploadUri) { Content = content }, ct);
             if (!put.IsSuccessStatusCode) throw new CloudException("server");
         }
-        using var finalized = await ApiAsync(session, HttpMethod.Post, "/backups/uploads/" + Uri.EscapeDataString(id), Json(new { device, replace, stableId = true }), ct);
-        using var result = JsonDocument.Parse(await finalized.Content.ReadAsStringAsync(ct));
-        return result.RootElement.GetProperty("id").GetString() ?? throw new CloudException("server");
+        try
+        {
+            using var finalized = await ApiAsync(session, HttpMethod.Post, "/backups/uploads/" + Uri.EscapeDataString(id), Json(new { device, replace, stableId = true }), ct);
+            using var result = JsonDocument.Parse(await finalized.Content.ReadAsStringAsync(ct));
+            return result.RootElement.GetProperty("id").GetString() ?? throw new CloudException("server");
+        }
+        catch (Exception e) when (e is JsonException or KeyNotFoundException or InvalidOperationException)
+        {
+            throw new CloudException("server");
+        }
     }
 
     public async Task<byte[]> DownloadAsync(string session, string id, CancellationToken ct = default)
     {
-        string url;
-        using (var response = await ApiAsync(session, HttpMethod.Get, "/backups/" + Uri.EscapeDataString(id) + "/url", null, ct))
-        using (var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct)))
-            url = doc.RootElement.GetProperty("url").GetString()!;
-        using var file = await SendAsync(new HttpRequestMessage(HttpMethod.Get, url), ct);
+        Uri downloadUri;
+        try
+        {
+            using var response = await ApiAsync(session, HttpMethod.Get, "/backups/" + Uri.EscapeDataString(id) + "/url", null, ct);
+            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+            downloadUri = SafeSignedUri(doc.RootElement.GetProperty("url").GetString());
+        }
+        catch (Exception e) when (e is JsonException or KeyNotFoundException or InvalidOperationException)
+        {
+            throw new CloudException("server");
+        }
+        using var file = await SendAsync(new HttpRequestMessage(HttpMethod.Get, downloadUri), ct, HttpCompletionOption.ResponseHeadersRead);
         if (!file.IsSuccessStatusCode) throw new CloudException("server");
-        return await file.Content.ReadAsByteArrayAsync(ct);
+        if (file.Content.Headers.ContentLength is > MaxBytes) throw new CloudException("too-large");
+        try
+        {
+            await using var stream = await file.Content.ReadAsStreamAsync(ct);
+            using var output = new MemoryStream();
+            var rented = ArrayPool<byte>.Shared.Rent(81920);
+            try
+            {
+                long total = 0;
+                int read;
+                while ((read = await stream.ReadAsync(rented.AsMemory(0, 81920), ct)) > 0)
+                {
+                    total += read;
+                    if (total > MaxBytes) throw new CloudException("too-large");
+                    output.Write(rented, 0, read);
+                }
+                return output.ToArray();
+            }
+            finally { ArrayPool<byte>.Shared.Return(rented); }
+        }
+        catch (IOException) { throw new CloudException("network"); }
     }
-
-    private static StringContent Json(object value) => new(JsonSerializer.Serialize(value), Encoding.UTF8, "application/json");
 
     public async Task DeleteAsync(string session, string id, CancellationToken ct = default)
     {
         using var _ = await ApiAsync(session, HttpMethod.Delete, "/backups/" + Uri.EscapeDataString(id), null, ct);
     }
+
+    private static Uri SafeSignedUri(string? raw) =>
+        Uri.TryCreate(raw, UriKind.Absolute, out var uri) && uri.UserInfo.Length == 0
+            && (uri.Scheme == "https" || uri.Scheme == "http" && uri.Host is "127.0.0.1" or "localhost" or "[::1]")
+            ? uri : throw new CloudException("server");
+
+    private static StringContent Json(object value) => new(JsonSerializer.Serialize(value), Encoding.UTF8, "application/json");
 
     private async Task<string> TokenAsync(string session, CancellationToken ct)
     {
@@ -99,8 +158,15 @@ public sealed class CloudAccount(HttpClient http, string authUrl, string apiUrl)
         request.Headers.TryAddWithoutValidation("Origin", Origin);
         using var response = await SendAsync(request, ct);
         if (!response.IsSuccessStatusCode) throw new CloudException("signed-out");
-        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
-        return doc.RootElement.GetProperty("token").GetString() ?? throw new CloudException("signed-out");
+        try
+        {
+            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+            return doc.RootElement.GetProperty("token").GetString() ?? throw new CloudException("signed-out");
+        }
+        catch (Exception e) when (e is JsonException or KeyNotFoundException or InvalidOperationException)
+        {
+            throw new CloudException("server");
+        }
     }
 
     private async Task<HttpResponseMessage> ApiAsync(string session, HttpMethod method, string path, HttpContent? content, CancellationToken ct)
@@ -120,9 +186,10 @@ public sealed class CloudAccount(HttpClient http, string authUrl, string apiUrl)
         });
     }
 
-    private async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+    private async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct,
+        HttpCompletionOption completion = HttpCompletionOption.ResponseContentRead)
     {
-        try { return await http.SendAsync(request, ct); }
+        try { return await http.SendAsync(request, completion, ct); }
         catch (HttpRequestException) { throw new CloudException("network"); }
         catch (TaskCanceledException) when (!ct.IsCancellationRequested) { throw new CloudException("network"); }
     }

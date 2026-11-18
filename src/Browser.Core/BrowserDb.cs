@@ -11,15 +11,21 @@ public sealed partial class BrowserDb : IDisposable
 
     public BrowserDb(string dataSource)
     {
-        _db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = dataSource }.ToString());
+        _db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = dataSource, Pooling = false }.ToString());
         _db.Open();
         Exec("""
+            PRAGMA journal_mode=WAL;
+            PRAGMA synchronous=NORMAL;
             CREATE TABLE IF NOT EXISTS visits (
                 url TEXT PRIMARY KEY, title TEXT NOT NULL, count INTEGER NOT NULL, last INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS bookmarks (
                 url TEXT PRIMARY KEY, title TEXT NOT NULL, added INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS site_icons (
                 domain TEXT PRIMARY KEY, icon TEXT, checked INTEGER NOT NULL);
+            CREATE INDEX IF NOT EXISTS idx_visits_last ON visits(last DESC);
+            CREATE INDEX IF NOT EXISTS idx_visits_count ON visits(count DESC, last DESC);
+            CREATE INDEX IF NOT EXISTS idx_bookmarks_added ON bookmarks(added);
+            CREATE INDEX IF NOT EXISTS idx_site_icons_checked ON site_icons(checked DESC);
             """);
     }
 

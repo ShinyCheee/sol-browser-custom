@@ -10,6 +10,8 @@ public static class PdfImage
     /// <param name="pixelsPerPoint">Pixels de l'image par point PDF (1/72 de pouce) ; fixe la taille de la page.</param>
     public static byte[] Wrap(byte[] jpeg, double pixelsPerPoint)
     {
+        if (!double.IsFinite(pixelsPerPoint) || pixelsPerPoint <= 0)
+            throw new ArgumentOutOfRangeException(nameof(pixelsPerPoint));
         var (width, height) = JpegSize(jpeg);
         var w = (width / pixelsPerPoint).ToString("0.##", CultureInfo.InvariantCulture);
         var h = (height / pixelsPerPoint).ToString("0.##", CultureInfo.InvariantCulture);
@@ -39,20 +41,30 @@ public static class PdfImage
         return pdf.ToArray();
     }
 
-    /// <summary>Lit la taille dans l'en-tête JPEG (segment SOF).</summary>
+    /// <summary>Lit la taille dans l'en-tête JPEG (segment SOF), en tolérant le bourrage 0xFF autorisé par la norme.</summary>
     public static (int Width, int Height) JpegSize(byte[] jpeg)
     {
         if (jpeg.Length < 4 || jpeg[0] != 0xFF || jpeg[1] != 0xD8) throw new InvalidDataException("Ce n'est pas une image JPEG.");
         var i = 2;
-        while (i + 9 < jpeg.Length)
+        while (i < jpeg.Length)
         {
             if (jpeg[i] != 0xFF) throw new InvalidDataException("En-tête JPEG illisible.");
-            var marker = jpeg[i + 1];
-            var length = (jpeg[i + 2] << 8) | jpeg[i + 3];
+            while (i < jpeg.Length && jpeg[i] == 0xFF) i++;
+            if (i >= jpeg.Length) break;
+            var marker = jpeg[i++];
+            if (marker is 0x00 or 0xD9 or 0xDA) break;
+            if (marker is 0x01 or (>= 0xD0 and <= 0xD8)) continue;
+            if (i + 2 > jpeg.Length) break;
+            var length = (jpeg[i] << 8) | jpeg[i + 1];
+            if (length < 2 || i + length > jpeg.Length) throw new InvalidDataException("En-tête JPEG illisible.");
             // SOF0 à SOF15, sauf DHT (C4), JPG (C8) et DAC (CC), qui ne décrivent pas l'image.
             if (marker is >= 0xC0 and <= 0xCF and not (0xC4 or 0xC8 or 0xCC))
-                return ((jpeg[i + 7] << 8) | jpeg[i + 8], (jpeg[i + 5] << 8) | jpeg[i + 6]);
-            i += 2 + length;
+            {
+                if (length < 7) throw new InvalidDataException("En-tête JPEG illisible.");
+                int height = (jpeg[i + 3] << 8) | jpeg[i + 4], width = (jpeg[i + 5] << 8) | jpeg[i + 6];
+                return width > 0 && height > 0 ? (width, height) : throw new InvalidDataException("Taille de l'image JPEG introuvable.");
+            }
+            i += length;
         }
         throw new InvalidDataException("Taille de l'image JPEG introuvable.");
     }

@@ -4,13 +4,26 @@ using Microsoft.Web.WebView2.Core;
 namespace Browser.App;
 
 // Téléchargements accélérés, comme IDM : un fichier de 4 Mo ou plus, que son serveur accepte de découper, est repris par
-// Sol et téléchargé à plusieurs connexions (voir SegmentedTransfer). Sinon le moteur continue seul, comme avant.
+// Sol et téléchargé à plusieurs connexions (voir SegmentedTransfer). Les exécutables, installateurs et scripts restent au
+// moteur pour bénéficier du contrôle de réputation SmartScreen natif.
 public sealed partial class BrowserController
 {
+    private static readonly HashSet<string> ExecutableExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".exe", ".msi", ".msix", ".msixbundle", ".appx", ".appxbundle",
+        ".bat", ".cmd", ".ps1", ".vbs", ".vbe", ".js", ".jse", ".wsf",
+        ".hta", ".scr", ".lnk", ".com", ".reg", ".pif", ".cpl", ".msc",
+    };
+
+    private static bool IsExecutableDownload(string resultFilePath, Uri uri) =>
+        ExecutableExtensions.Contains(Path.GetExtension(resultFilePath.TrimEnd(' ', '.')))
+        || ExecutableExtensions.Contains(Path.GetExtension(uri.AbsolutePath.TrimEnd(' ', '.', '/')));
+
     private async Task<bool> AccelerateAsync(string tabId, CoreWebView2DownloadStartingEventArgs e)
     {
         var native = e.DownloadOperation;
         if (!Uri.TryCreate(native.Uri, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") || uri.UserInfo.Length > 0
+            || IsExecutableDownload(e.ResultFilePath, uri)
             || native.TotalBytesToReceive < SegmentedTransfer.MinSplit || _pages.CoreOf(tabId) is not { } core) return false;
         try
         {

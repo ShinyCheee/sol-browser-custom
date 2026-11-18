@@ -74,14 +74,14 @@ public sealed class SolAiPermissionsTests : IDisposable
     }
 
     [Fact]
-    public void CancelledApprovalCannotGrantStandingPermission()
+    public async Task CancelledApprovalCannotGrantStandingPermission()
     {
         var controller = new BrowserController { AiPermissionsPath = SettingsPath };
         var pending = controller.PendingPermission("cancelled");
         controller.CancelPermission();
         controller.GrantAlways("cancelled");
         Assert.True(pending.IsCompletedSuccessfully);
-        Assert.False(pending.Result);
+        Assert.False(await pending);
         Assert.False(controller.PermissionSettings.SolAiAutoApproveActions);
     }
 
@@ -105,5 +105,27 @@ public sealed class SolAiPermissionsTests : IDisposable
     {
         Assert.Null(CommandParser.Parse("""{"type":"ai.approve.always"}"""));
         Assert.Equal("real", CommandParser.Parse("""{"type":"ai.approve.always","id":"real"}""")!.Id);
+    }
+
+    [Theory]
+    [InlineData("https://developer.example.com/docs/authentication", false)]
+    [InlineData("https://example.com/blog/payment-gateways-explained", false)]
+    [InlineData("https://example.com/css/display", false)]
+    [InlineData("https://example.com/login", true)]
+    [InlineData("https://example.com/user/signin.php", true)]
+    [InlineData("https://shop.example.com/cart/checkout", true)]
+    [InlineData("https://app.example.com/settings/billing", true)]
+    [InlineData("https://app.example.com/verify/2fa", true)]
+    [InlineData("https://app.example.com/challenge/otp", true)]
+    [InlineData("https://service.example.fr/espace/connexion", true)]
+    [InlineData("https://boutique.example.fr/commande/paiement", true)]
+    [InlineData("https://client.example.fr/comptes/virement", true)]
+    [InlineData("https://accounts.google.com/Service", true)]
+    public void SensitiveUrlMatchesExactHostAndPathSegmentsWithoutBlockingDocumentation(string url, bool sensitive)
+    {
+        Assert.Equal(sensitive, SolAiPermissions.IsSensitiveUrl(url));
+        var auto = new Settings { SolAiAutoApproveActions = true };
+        Assert.Equal(sensitive, SolAiPermissions.RequiresApproval("click", auto, url));
+        Assert.False(SolAiPermissions.RequiresApproval("read_page", auto, url));
     }
 }

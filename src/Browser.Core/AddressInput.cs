@@ -4,7 +4,23 @@ namespace Browser.Core;
 
 public static class AddressInput
 {
+    public const string DefaultSearchUrlTemplate = "https://www.google.com/search?q={0}";
     private static readonly string[] Schemes = ["http://", "https://", "file://", "about:"];
+
+    public static bool IsValidUrlTemplate(string? template)
+    {
+        if (string.IsNullOrWhiteSpace(template) || template.Length > 2048 || template.Any(char.IsControl)) return false;
+        var trimmed = template.Trim();
+        if (!trimmed.Contains("{0}", StringComparison.Ordinal)) return false;
+        return Uri.TryCreate(trimmed.Replace("{0}", "sol", StringComparison.Ordinal), UriKind.Absolute, out var uri)
+            && uri.Scheme is "https" or "http" && uri.Host.Length > 0;
+    }
+
+    public static string FormatSearchUrl(string? searchUrlTemplate, string query)
+    {
+        var active = IsValidUrlTemplate(searchUrlTemplate) ? searchUrlTemplate!.Trim() : DefaultSearchUrlTemplate;
+        return active.Replace("{0}", Uri.EscapeDataString(query), StringComparison.Ordinal);
+    }
 
     public static string Resolve(string input, string searchUrlTemplate)
     {
@@ -25,6 +41,6 @@ public static class AddressInput
                 return "http://" + text;
             if (host.Contains('.')) return "https://" + text;
         }
-        return string.Format(searchUrlTemplate, Uri.EscapeDataString(text));
+        return FormatSearchUrl(searchUrlTemplate, text);
     }
 }

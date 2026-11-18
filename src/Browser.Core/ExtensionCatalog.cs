@@ -24,7 +24,7 @@ public static class ExtensionCatalog
     {
         try
         {
-            using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(folder, "manifest.json")), new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
+            using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(folder, "manifest.json")), ExtensionPackage.Lenient);
             var root = doc.RootElement;
             if (root.ValueKind != JsonValueKind.Object || Text(root, "name") is not { Length: > 0 } name) return null;
             if (root.TryGetProperty("theme", out _)) return null; // un thème n'est pas une extension
@@ -40,7 +40,7 @@ public static class ExtensionCatalog
                     || update.StartsWith(ExtensionPackage.EdgeStoreUpdates, StringComparison.OrdinalIgnoreCase)),
                 root.TryGetProperty("side_panel", out var panel) && Text(panel, "default_path") is { Length: > 0 } panelPage ? panelPage : null);
         }
-        catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException) { return null; }
+        catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException or ArgumentException) { return null; }
     }
 
     private static IEnumerable<string> Strings(JsonElement e, string name) =>
@@ -55,15 +55,19 @@ public static class ExtensionCatalog
     {
         if (!name.StartsWith("__MSG_", StringComparison.Ordinal) || !name.EndsWith("__", StringComparison.Ordinal)) return name;
         var key = name[6..^2];
-        foreach (var locale in new[] { Text(manifest, "default_locale"), "en", "en_US" }.OfType<string>().Distinct())
+        var localesRoot = Path.GetFullPath(Path.Combine(folder, "_locales")) + Path.DirectorySeparatorChar;
+        foreach (var locale in new[] { Text(manifest, "default_locale"), "en", "en_US" }.OfType<string>().Where(l => l.Length > 0).Distinct())
         {
             try
             {
-                using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(folder, "_locales", locale, "messages.json")));
+                var messagesFile = Path.GetFullPath(Path.Combine(localesRoot, locale, "messages.json"));
+                if (!messagesFile.StartsWith(localesRoot, StringComparison.OrdinalIgnoreCase) || !File.Exists(messagesFile)) continue;
+                using var doc = JsonDocument.Parse(File.ReadAllText(messagesFile), ExtensionPackage.Lenient);
+                if (doc.RootElement.ValueKind != JsonValueKind.Object) continue;
                 foreach (var entry in doc.RootElement.EnumerateObject())
                     if (entry.Name.Equals(key, StringComparison.OrdinalIgnoreCase) && Text(entry.Value, "message") is { Length: > 0 } message) return message;
             }
-            catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException) { }
+            catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { }
         }
         return name;
     }
@@ -187,7 +191,7 @@ public static class ExtensionCatalog
     {
         try
         {
-            using var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(folder, "manifest.json")));
+            using var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(folder, "manifest.json")), ExtensionPackage.Lenient);
             if (!manifest.RootElement.TryGetProperty("icons", out var icons) || icons.ValueKind != JsonValueKind.Object) return null;
             var root = Path.GetFullPath(folder) + Path.DirectorySeparatorChar;
             foreach (var icon in icons.EnumerateObject().OrderByDescending(i => int.TryParse(i.Name, out var size) ? size : 0))

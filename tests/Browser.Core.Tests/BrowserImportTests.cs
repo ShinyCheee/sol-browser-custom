@@ -87,6 +87,38 @@ public class BrowserImportTests : IDisposable
     }
 
     [Fact]
+    public void History_reads_live_wal_entries_while_source_browser_keeps_database_open_for_writing()
+    {
+        var dir = Profile(@"Google\Chrome\User Data", "Default");
+        var when = new DateTimeOffset(2026, 11, 1, 9, 30, 0, TimeSpan.Zero);
+        var chromeTime = (when - new DateTimeOffset(1601, 1, 1, 0, 0, 0, TimeSpan.Zero)).Ticks / 10;
+        var historyFile = Path.Combine(dir, "History");
+        using var writer = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = historyFile, Pooling = false }.ToString());
+        writer.Open();
+        using (var setup = writer.CreateCommand())
+        {
+            setup.CommandText = """
+                PRAGMA journal_mode=WAL;
+                PRAGMA wal_autocheckpoint=0;
+                CREATE TABLE urls (id INTEGER PRIMARY KEY, url TEXT, title TEXT, visit_count INTEGER, typed_count INTEGER, last_visit_time INTEGER, hidden INTEGER);
+                """;
+            setup.ExecuteNonQuery();
+        }
+        using (var insert = writer.CreateCommand())
+        {
+            insert.CommandText = $"INSERT INTO urls (url, title, visit_count, typed_count, last_visit_time, hidden) VALUES ('https://live-wal.test/', 'En direct', 3, 1, {chromeTime}, 0)";
+            insert.ExecuteNonQuery();
+        }
+        Assert.True(File.Exists(historyFile + "-wal"));
+
+        var tempDir = Path.Combine(_dir, "wal-tmp");
+        var visits = BrowserImport.ReadHistory(dir, limit: 10, tempDir);
+        var imported = Assert.Single(visits);
+        Assert.Equal(("https://live-wal.test/", "En direct", 3, when), (imported.Url, imported.Title, imported.Count, imported.Last));
+        Assert.Empty(Directory.GetFiles(tempDir));
+    }
+
+    [Fact]
     public void Detect_lists_installed_browsers_with_their_named_profiles()
     {
         var chrome = Path.Combine(_dir, "Local", @"Google\Chrome\User Data");

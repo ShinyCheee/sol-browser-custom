@@ -76,32 +76,46 @@ public static class ChatGptOAuth
     {
         var parts = jwt.Split('.');
         if (parts.Length != 3) throw new FormatException("invalid-id-token");
-        using var header = JsonDocument.Parse(FromBase64Url(parts[0]));
-        if (header.RootElement.GetProperty("alg").GetString() != "RS256") throw new FormatException("invalid-id-token");
-        var kid = header.RootElement.TryGetProperty("kid", out var k) ? k.GetString() : null;
-        using var keys = JsonDocument.Parse(jwks);
-        var key = keys.RootElement.GetProperty("keys").EnumerateArray()
-            .FirstOrDefault(j => j.GetProperty("kty").GetString() == "RSA" && (kid == null || j.TryGetProperty("kid", out var id) && id.GetString() == kid));
-        if (key.ValueKind != JsonValueKind.Object) throw new FormatException("unknown-signing-key");
-        using var rsa = RSA.Create(new RSAParameters
+        try
         {
-            Modulus = FromBase64Url(key.GetProperty("n").GetString()!), Exponent = FromBase64Url(key.GetProperty("e").GetString()!),
-        });
-        if (!rsa.VerifyData(Encoding.ASCII.GetBytes(parts[0] + "." + parts[1]), FromBase64Url(parts[2]), HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1))
-            throw new FormatException("invalid-id-token");
-        using var payload = JsonDocument.Parse(FromBase64Url(parts[1]));
-        var claims = payload.RootElement;
-        var audience = claims.GetProperty("aud");
-        var skew = TimeSpan.FromSeconds(5);
-        var valid = claims.GetProperty("iss").GetString() == Issuer
-            && (audience.ValueKind == JsonValueKind.String ? audience.GetString() == clientId : audience.EnumerateArray().Any(a => a.GetString() == clientId))
-            && (!claims.TryGetProperty("azp", out var azp) || azp.GetString() == clientId)
-            && DateTimeOffset.FromUnixTimeSeconds(claims.GetProperty("exp").GetInt64()) > now - skew
-            && DateTimeOffset.FromUnixTimeSeconds(claims.GetProperty("iat").GetInt64()) < now + skew
-            && (nonce == null || claims.TryGetProperty("nonce", out var n) && n.GetString() == nonce);
-        var subject = claims.TryGetProperty("sub", out var sub) ? sub.GetString() : null;
-        if (!valid || string.IsNullOrEmpty(subject)) throw new FormatException("invalid-id-token");
-        return (subject, claims.TryGetProperty("email", out var email) ? email.GetString() ?? "" : "");
+            using var header = JsonDocument.Parse(FromBase64Url(parts[0]));
+            if (header.RootElement.GetProperty("alg").GetString() != "RS256") throw new FormatException("invalid-id-token");
+            var kid = header.RootElement.TryGetProperty("kid", out var k) && k.ValueKind == JsonValueKind.String ? k.GetString() : null;
+            using var keys = JsonDocument.Parse(jwks);
+            var key = keys.RootElement.GetProperty("keys").EnumerateArray()
+                .FirstOrDefault(j => j.GetProperty("kty").GetString() == "RSA" && (kid == null || j.TryGetProperty("kid", out var id) && id.GetString() == kid));
+            if (key.ValueKind != JsonValueKind.Object) throw new FormatException("unknown-signing-key");
+            using var rsa = RSA.Create(new RSAParameters
+            {
+                Modulus = FromBase64Url(key.GetProperty("n").GetString()!), Exponent = FromBase64Url(key.GetProperty("e").GetString()!),
+            });
+            if (!rsa.VerifyData(Encoding.ASCII.GetBytes(parts[0] + "." + parts[1]), FromBase64Url(parts[2]), HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1))
+                throw new FormatException("invalid-id-token");
+            using var payload = JsonDocument.Parse(FromBase64Url(parts[1]));
+            var claims = payload.RootElement;
+            var audience = claims.GetProperty("aud");
+            var audienceMatches = audience.ValueKind switch
+            {
+                JsonValueKind.String => audience.GetString() == clientId,
+                JsonValueKind.Array => audience.EnumerateArray().Any(a => a.ValueKind == JsonValueKind.String && a.GetString() == clientId),
+                _ => false,
+            };
+            var skew = TimeSpan.FromSeconds(5);
+            var valid = claims.GetProperty("iss").GetString() == Issuer
+                && audienceMatches
+                && (!claims.TryGetProperty("azp", out var azp) || azp.ValueKind == JsonValueKind.String && azp.GetString() == clientId)
+                && DateTimeOffset.FromUnixTimeSeconds(claims.GetProperty("exp").GetInt64()) > now - skew
+                && DateTimeOffset.FromUnixTimeSeconds(claims.GetProperty("iat").GetInt64()) < now + skew
+                && (nonce == null || claims.TryGetProperty("nonce", out var n) && n.ValueKind == JsonValueKind.String && n.GetString() == nonce);
+            var subject = claims.TryGetProperty("sub", out var sub) && sub.ValueKind == JsonValueKind.String ? sub.GetString() : null;
+            if (!valid || string.IsNullOrEmpty(subject)) throw new FormatException("invalid-id-token");
+            return (subject, claims.TryGetProperty("email", out var email) && email.ValueKind == JsonValueKind.String ? email.GetString() ?? "" : "");
+        }
+        catch (FormatException e) when (e.Message is "unknown-signing-key" or "invalid-id-token") { throw; }
+        catch (Exception e) when (e is JsonException or KeyNotFoundException or InvalidOperationException or CryptographicException or ArgumentException or FormatException)
+        {
+            throw new FormatException("invalid-id-token", e);
+        }
     }
 
     // Une ligne « data: » du flux de la Responses API : type, texte ajouté, code d'erreur.
@@ -136,9 +150,6 @@ public static class ChatGptOAuth
         catch (JsonException) { }
         return $"http-{status}";
     }
-
-    // Premier modèle listé pour ce compte, dans l'ordre du serveur.
-    public static string? FirstModel(string json) => Models(json).Select(m => m.Slug).FirstOrDefault();
 
     // Modèles proposés à ce compte, dans l'ordre du serveur, avec leur nom affiché.
     public static IReadOnlyList<(string Slug, string Name)> Models(string json)

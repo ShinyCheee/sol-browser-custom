@@ -184,29 +184,35 @@ public sealed partial class BrowserController
         _pages.Navigating += core => { if (_asking is { } pending && pending.Core == core) HidePopup(); };
         _window.AppWindow.Changed += (_, e) => { if (e.DidPresenterChange || e.DidSizeChange) { _popup.Rescale(); if (_paletteItems is not null) _popup.Post(PaletteJson()); Refresh(); } };
         // Mise à jour de Sol : l'encart en bas à droite et les réglages suivent le téléchargement, puis proposent de redémarrer.
-        Program.UpdateChanged += () => _window.DispatcherQueue.TryEnqueue(() =>
+        Action onUpdateChanged = () => _window.DispatcherQueue.TryEnqueue(() =>
         {
+            if (_closingWindow) return;
             UpdateDock();
             if (_settingsOpen) _popup.Post(SettingsJson());
         });
+        Program.UpdateChanged += onUpdateChanged;
         WireGitLabSessionClosing();
         _window.Closed += (_, _) =>
         {
             _closingWindow = true;
+            Program.UpdateChanged -= onUpdateChanged;
             _pages.CloseAllPreviews();
             foreach (var job in _videoJobs) job.Cancel();
             _videoProbeCancel?.Cancel();
             _videoWarmupCancel.Cancel();
             foreach (var discovery in _videoDiscovery.Values) discovery.Cancel.Cancel();
+            foreach (var timer in _downloadTimers) timer.Stop();
+            _downloadTimers.Clear();
+            _cloudAutoTimer?.Stop();
+            _startIconPublish.Stop();
             _noteMaintenance.Stop();
             CancelAi();
-            CloseVoice(); CancelChat(); CancelCategories(); _chatGpt.CancelSignIn();
+            CloseVoice(release: true); CancelChat(); CancelCategories(); _chatGpt.CancelSignIn();
             _categoriesTimer.Stop();
             _pages.StopSpelling();
             _capture.Cancel();
-            _sessionSave.Stop();
             HidePopup(); // terminer les demandes de permission encore en attente
-            SaveSession();
+            FlushSessionSave();
             _db.Dispose();
             // Fenêtre privée : ses données sont effacées dès maintenant, par un processus qui attend la fin de celui-ci.
             if (AppPaths.Private && Environment.ProcessPath is { } exe)

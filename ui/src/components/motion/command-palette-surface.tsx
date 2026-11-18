@@ -2,36 +2,69 @@
 "use client";
 // beui.dev/components/blocks/command-palette
 
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { Search, type LucideIcon } from "lucide-react";
-import {
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { Search } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import type { KeyboardEvent, RefObject } from "react";
 import { createPortal } from "react-dom";
+import { t, useLang } from "@/i18n";
 import { EASE_OUT } from "@/lib/ease";
-import { useOnOpen } from "@/lib/hooks/use-on-open";
-import { useRowCursor } from "@/lib/hooks/use-row-cursor";
-import { useTouchCapable } from "@/lib/hooks/use-touch-capable";
 import { PresenceGate } from "@/lib/presence-gate";
 import { cn } from "@/lib/utils";
-import { searchCommands } from "@/lib/command-search";
+import { type CommandItem, PANEL_SPRING } from "./command-palette";
 
-import type {CommandItem} from "./command-palette";
-import {PANEL_SPRING} from "./command-palette";
-export function CommandPaletteSurface({embedded,listHeight,title,open,reduce,canTouch,inputRef,listRef,uid,query,setQuery,rows,grouped,active,moveTo,setOpen,onKeyDown,placeholder,emptyMessage}: {embedded:boolean;listHeight:number;title:string;open:boolean;reduce:boolean|null;canTouch:boolean;inputRef:React.RefObject<HTMLInputElement|null>;listRef:React.RefObject<HTMLDivElement|null>;uid:string;query:string;setQuery:(q:string)=>void;rows:CommandItem[];grouped:[string,CommandItem[]][];active:number;moveTo:(id:string)=>void;setOpen:(v:boolean)=>void;onKeyDown:(e:React.KeyboardEvent)=>void;placeholder:string;emptyMessage:string}){const hasIcons=rows.some(item=>item.icon);const surface=(
+interface CommandPaletteSurfaceProps {
+  embedded: boolean;
+  listHeight: number;
+  title: string;
+  open: boolean;
+  reduce: boolean | null;
+  canTouch: boolean;
+  inputRef: RefObject<HTMLInputElement | null>;
+  listRef: RefObject<HTMLDivElement | null>;
+  uid: string;
+  query: string;
+  setQuery: (q: string) => void;
+  rows: CommandItem[];
+  grouped: [string, CommandItem[]][];
+  active: number;
+  moveTo: (id: string) => void;
+  setOpen: (v: boolean) => void;
+  onKeyDown: (e: KeyboardEvent) => void;
+  placeholder: string;
+  emptyMessage: string;
+}
+
+export function CommandPaletteSurface({
+  embedded,
+  listHeight,
+  title,
+  open,
+  reduce,
+  canTouch,
+  inputRef,
+  listRef,
+  uid,
+  query,
+  setQuery,
+  rows,
+  grouped,
+  active,
+  moveTo,
+  setOpen,
+  onKeyDown,
+  placeholder,
+  emptyMessage,
+}: CommandPaletteSurfaceProps) {
+  useLang();
+  const hasIcons = rows.some((item) => item.icon);
+  const surface = (
     <AnimatePresence initial={false}>
-      {open&&!embedded ? (
+      {open && !embedded ? (
         <PresenceGate key="backdrop">
           {({ gate }) => (
             <motion.button
               type="button"
-              aria-label="Close command palette"
+              aria-label={t("Fermer la palette de commandes", "Close command palette")}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{
@@ -50,11 +83,13 @@ export function CommandPaletteSurface({embedded,listHeight,title,open,reduce,can
       {open ? (
         <PresenceGate key="panel-layer">
           {({ isPresent, gate }) => (
-            // The layer itself never takes pointer events, so it carries
-            // `inert` alone rather than the gate's pointer-events value.
             <div
               inert={!isPresent}
-              className={embedded?"sol-command-layer":"pointer-events-none fixed inset-x-4 bottom-4 top-[18vh] z-[100] flex items-start justify-center"}
+              className={
+                embedded
+                  ? "sol-command-layer"
+                  : "pointer-events-none fixed inset-x-4 bottom-4 top-[18vh] z-[100] flex items-start justify-center"
+              }
             >
               <motion.div
                 role="dialog"
@@ -77,7 +112,7 @@ export function CommandPaletteSurface({embedded,listHeight,title,open,reduce,can
                 onKeyDown={onKeyDown}
                 className="sol-command-surface pointer-events-auto w-full max-w-xl overflow-hidden rounded-2xl border border-border bg-background shadow-2xl will-change-transform"
               >
-                <div className="flex items-center gap-3 border-b border-border px-4">
+                <div className="palette-search flex items-center gap-3 border-b border-border px-4">
                   <Search className="h-4 w-4 text-muted-foreground" />
                   <input
                     ref={inputRef}
@@ -85,25 +120,20 @@ export function CommandPaletteSurface({embedded,listHeight,title,open,reduce,can
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder={placeholder}
                     role="combobox"
-                    // The field only exists while the palette is open.
                     aria-expanded="true"
                     aria-controls={`${uid}-list`}
                     aria-activedescendant={
-                      rows.length > 0 ? `${uid}-opt-${active}` : undefined
+                      rows[active] ? `palette-result-${rows[active].id}` : undefined
                     }
                     aria-autocomplete="list"
-                    aria-label={placeholder} className={cn(
+                    aria-label={placeholder}
+                    className={cn(
                       "h-12 flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none",
-                      // The palette focuses this field the moment it opens, and iOS
-                      // zooms the page in on a focused field under 16px: the fixed
-                      // overlay is magnified off-center — clipped leading edge, half
-                      // an icon column — and the zoom outlives the palette. 16px on
-                      // touch keeps the page at scale 1; pointer devices keep 14px.
                       canTouch && "text-base",
                     )}
                   />
                   <kbd className="hidden rounded border border-border bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground sm:inline-block">
-                    ESC
+                    {t("Échap", "ESC")}
                   </kbd>
                 </div>
                 <div
@@ -111,10 +141,11 @@ export function CommandPaletteSurface({embedded,listHeight,title,open,reduce,can
                   id={`${uid}-list`}
                   role="listbox"
                   aria-label={title}
-                  style={{maxHeight:listHeight}} className="palette-results max-h-[60vh] overflow-y-auto overscroll-contain p-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                  style={{ maxHeight: listHeight }}
+                  className="palette-results max-h-[60vh] overflow-y-auto overscroll-contain p-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                 >
                   {rows.length === 0 ? (
-                    <div className="p-8 text-center text-sm text-muted-foreground">
+                    <div className="palette-empty p-8 text-center text-sm text-muted-foreground">
                       {emptyMessage}
                     </div>
                   ) : (
@@ -127,7 +158,6 @@ export function CommandPaletteSurface({embedded,listHeight,title,open,reduce,can
                           {group}
                         </div>
                         {list.map((it) => {
-                          // `rows` holds these very objects, in render order.
                           const idx = rows.indexOf(it);
                           const isActive = idx === active;
                           const Icon = it.icon;
@@ -135,20 +165,19 @@ export function CommandPaletteSurface({embedded,listHeight,title,open,reduce,can
                             <button
                               key={it.id}
                               type="button"
-                              id={`${uid}-opt-${idx}`}
+                              id={`palette-result-${it.id}`}
                               role="option"
                               aria-selected={isActive}
                               data-index={idx}
+                              data-palette-index={idx}
                               onMouseEnter={() => moveTo(it.id)}
                               onClick={() => {
                                 it.onSelect();
-                                if(!embedded)setOpen(false);
+                                if (!embedded) setOpen(false);
                               }}
                               className={cn(
                                 "relative isolate flex w-full items-center gap-3 rounded-md px-2 py-2 text-left text-sm transition-colors",
-                                isActive
-                                  ? "text-foreground"
-                                  : "text-muted-foreground",
+                                isActive ? "text-foreground" : "text-muted-foreground",
                               )}
                             >
                               {isActive ? (
@@ -158,13 +187,7 @@ export function CommandPaletteSurface({embedded,listHeight,title,open,reduce,can
                                   transition={
                                     reduce
                                       ? { duration: 0 }
-                                      : // Tracks rapid arrow-key navigation — keep it tighter
-                                        // than SPRING_LAYOUT so it never lags the active row.
-                                        {
-                                          type: "spring",
-                                          stiffness: 480,
-                                          damping: 38,
-                                        }
+                                      : { type: "spring", stiffness: 480, damping: 38 }
                                   }
                                 />
                               ) : null}
@@ -198,4 +221,8 @@ export function CommandPaletteSurface({embedded,listHeight,title,open,reduce,can
           )}
         </PresenceGate>
       ) : null}
-    </AnimatePresence>);return embedded?surface:createPortal(surface,document.body);}
+    </AnimatePresence>
+  );
+
+  return embedded ? surface : createPortal(surface, document.body);
+}

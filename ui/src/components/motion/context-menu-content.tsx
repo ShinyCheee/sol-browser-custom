@@ -31,6 +31,7 @@ import {
 import { createPortal } from "react-dom";
 import { EASE_OUT, SPRING_LAYOUT, SPRING_PANEL } from "@/lib/ease";
 import { holdSelection, TOUCH_GESTURE_CONTENT_CLASS } from "@/lib/touch";
+import { t } from "@/i18n";
 import { cn } from "@/lib/utils";
 
 import {useContextMenuContext,getEnabledItems,clamp,collapsedClip,VIEWPORT_PADDING,MORPH_DURATION,type MenuPoint} from './context-menu-shared';
@@ -43,7 +44,7 @@ export interface ContextMenuContentProps {
 export function ContextMenuContent({
   children,
   className,
-  ariaLabel = "Context menu",
+  ariaLabel = t("Menu contextuel", "Context menu"),
 }: ContextMenuContentProps) {
   const context = useContextMenuContext("ContextMenuContent");
   const [mounted, setMounted] = useState(false);

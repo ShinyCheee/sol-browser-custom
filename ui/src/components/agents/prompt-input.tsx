@@ -1,36 +1,31 @@
 "use client";
 // beUI source: Copyright (c) 2026 Saurabh Chauhan, MIT; see ui/licenses/beui-MIT.txt.
 
-import { ArrowUp, Plus, Square } from "lucide-react";
+import { ArrowUp, Square } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   type FormEvent,
   type KeyboardEvent,
-  type ReactNode,
-  type TextareaHTMLAttributes,
   useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
   useState,
 } from "react";
-import { Button } from "@/components/motion/button";
-import {
-  MorphPopover,
-  MorphPopoverContent,
-  MorphPopoverTrigger,
-} from "@/components/motion/popover-morph";
+import { Button } from "@/components/motion/button/base";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
 } from "@/components/motion/select";
+import { t, useLang } from "@/i18n";
 import { SPRING_SWAP } from "@/lib/ease";
 import { cn } from "@/lib/utils";
+import type { PromptInputProps, PromptModel } from "./prompt-input-types";
 
-import type { PromptModel, PromptAction, PromptInputProps } from "./prompt-input-types";
-export type { PromptModel, PromptAction, PromptInputProps } from "./prompt-input-types";
+export type { PromptInputProps, PromptModel } from "./prompt-input-types";
+
 export function PromptInput({
   value,
   defaultValue = "",
@@ -39,21 +34,24 @@ export function PromptInput({
   model,
   defaultModel,
   onModelChange,
-  actions = [],
-  onAction,
   onSubmit,
   loading = false,
   onStop,
   minRows = 2,
   maxRows = 8,
   leadingAction,
+  textareaRef: externalTextareaRef,
   className,
   disabled,
-  placeholder = "Ask the agent to do something…",
-  "aria-label": ariaLabel = "Prompt",
+  placeholder,
+  "aria-label": ariaLabel,
   onKeyDown,
   ...textareaProps
 }: PromptInputProps) {
+  useLang();
+  const resolvedPlaceholder =
+    placeholder ?? t("Demandez quelque chose à l’agent…", "Ask the agent to do something…");
+  const resolvedAriaLabel = ariaLabel ?? t("Message", "Prompt");
   const reduce = useReducedMotion() ?? false;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const measurementRef = useRef<HTMLDivElement>(null);
@@ -61,13 +59,21 @@ export function PromptInput({
   const [internalModel, setInternalModel] = useState(
     defaultModel ?? models[0]?.value,
   );
-  const [actionsOpen, setActionsOpen] = useState(false);
   const currentValue = value ?? internalValue;
   const currentModelValue = model ?? internalModel;
   const currentModel = models.find(
     (option) => option.value === currentModelValue,
   );
   const canSubmit = Boolean(currentValue.trim()) && !disabled && !loading;
+
+  const setRefs = useCallback(
+    (node: HTMLTextAreaElement | null) => {
+      textareaRef.current = node;
+      if (typeof externalTextareaRef === "function") externalTextareaRef(node);
+      else if (externalTextareaRef) externalTextareaRef.current = node;
+    },
+    [externalTextareaRef],
+  );
 
   const resizeTextarea = useCallback(() => {
     const textarea = textareaRef.current;
@@ -146,11 +152,11 @@ export function PromptInput({
         {`${currentValue}\u200b`}
       </div>
       <textarea
-        ref={textareaRef}
+        ref={setRefs}
         value={currentValue}
         disabled={disabled}
-        placeholder={placeholder}
-        aria-label={ariaLabel}
+        placeholder={resolvedPlaceholder}
+        aria-label={resolvedAriaLabel}
         rows={minRows}
         {...textareaProps}
         onChange={(event) => setValue(event.target.value)}
@@ -159,65 +165,6 @@ export function PromptInput({
       />
 
       <div className="mt-1 flex min-h-8 items-center gap-1">
-        {actions.length ? (
-          <MorphPopover open={actionsOpen} onOpenChange={setActionsOpen}>
-            <MorphPopoverTrigger>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                disabled={disabled || loading}
-                aria-label="Add to prompt"
-                className="size-8 rounded-full"
-              >
-                <motion.span
-                  aria-hidden="true"
-                  animate={{ rotate: actionsOpen ? 45 : 0 }}
-                  transition={reduce ? { duration: 0 } : SPRING_SWAP}
-                >
-                  <Plus className="size-4" />
-                </motion.span>
-              </Button>
-            </MorphPopoverTrigger>
-
-            <MorphPopoverContent
-              side="top"
-              align="start"
-              sideOffset={8}
-              radius={12}
-              className="w-56 p-1.5"
-            >
-              {actions.map((action) => (
-                <button
-                  key={action.value}
-                  type="button"
-                  disabled={action.disabled}
-                  onClick={() => {
-                    onAction?.(action.value);
-                    setActionsOpen(false);
-                  }}
-                  className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left outline-none transition-colors hover:bg-muted focus-visible:bg-muted disabled:pointer-events-none disabled:opacity-50"
-                >
-                  {action.icon ? (
-                    <span className="mt-0.5 grid size-5 shrink-0 place-items-center text-muted-foreground [&_svg]:size-4">
-                      {action.icon}
-                    </span>
-                  ) : null}
-                  <span className="min-w-0">
-                    <span className="block text-sm text-foreground">
-                      {action.label}
-                    </span>
-                    {action.description ? (
-                      <span className="mt-0.5 block text-xs leading-4 text-muted-foreground">
-                        {action.description}
-                      </span>
-                    ) : null}
-                  </span>
-                </button>
-              ))}
-            </MorphPopoverContent>
-          </MorphPopover>
-        ) : null}
         {leadingAction}
         {models.length ? (
           <Select
@@ -234,7 +181,7 @@ export function PromptInput({
                   </span>
                 ) : null}
                 <span className="truncate text-muted-foreground">
-                  {currentModel?.label ?? "Choose model"}
+                  {currentModel?.label ?? t("Choisir un modèle", "Choose model")}
                 </span>
               </span>
             </SelectTrigger>
@@ -266,7 +213,11 @@ export function PromptInput({
           type={loading ? "button" : "submit"}
           size="icon"
           disabled={loading ? !onStop : !canSubmit}
-          aria-label={loading ? "Stop generating" : "Send prompt"}
+          aria-label={
+            loading
+              ? t("Arrêter la génération", "Stop generating")
+              : t("Envoyer", "Send prompt")
+          }
           onClick={loading ? onStop : undefined}
           className="ml-auto size-8 rounded-full"
         >

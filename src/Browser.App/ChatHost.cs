@@ -16,6 +16,7 @@ public sealed class ChatHost
     private readonly Func<Task> _init;
     private Task? _initializing;
     private readonly UiViewRest _rest;
+    private bool _suppressed;
     public bool IsOpen { get; private set; }
 
     public const double DefaultWidth = SidePanelLayout.ChatDefault;
@@ -33,7 +34,7 @@ public sealed class ChatHost
     }
     public void Rescale()
     {
-        if (!IsOpen) return;
+        if (!IsOpen || _suppressed) return;
         var available = Math.Max(0, _area.ActualWidth);
         var scale = _settings.UiFactor;
         var overlay = available < 640 * scale;
@@ -48,7 +49,8 @@ public sealed class ChatHost
     }
     public async Task ShowAsync()
     {
-        IsOpen = true; _rest.Wake(); Rescale(); _view.Visibility = Visibility.Visible;
+        IsOpen = true; _rest.Wake();
+        if (!_suppressed) { Rescale(); _view.Visibility = Visibility.Visible; }
         try
         {
             await (_initializing ??= _init());
@@ -64,5 +66,22 @@ public sealed class ChatHost
         _column.Width = new GridLength(0); _view.Visibility = Visibility.Collapsed; _grip.Visibility = Visibility.Collapsed;
         _rest.Rest();
     }
+    public void SetSuppressed(bool suppressed)
+    {
+        if (_suppressed == suppressed) return;
+        _suppressed = suppressed;
+        if (suppressed)
+        {
+            _column.Width = new GridLength(0);
+            _view.Visibility = Visibility.Collapsed;
+            _grip.Visibility = Visibility.Collapsed;
+        }
+        else if (IsOpen)
+        {
+            _view.Visibility = Visibility.Visible;
+            Rescale();
+        }
+    }
+
     public void Post(string json) => _bridge.Post(json);
 }

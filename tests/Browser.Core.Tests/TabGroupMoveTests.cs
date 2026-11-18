@@ -34,6 +34,27 @@ public class TabGroupMoveTests
         Assert.Equal(before, m.Tabs);
     }
 
+    [Fact]
+    public void Splitting_middle_tab_into_new_group_then_moving_original_group_preserves_all_tabs()
+    {
+        var m = new TabManager();
+        var a = m.Open("a"); var b = m.Open("b"); var c = m.Open("c"); var d = m.Open("d");
+        var g1 = m.CreateGroup(a.Id, "G1")!;
+        m.AddToGroup(b.Id, g1.Id);
+        m.AddToGroup(c.Id, g1.Id);
+
+        var g2 = m.CreateGroup(b.Id, "G2")!;
+        Assert.Equal([a.Id, c.Id, b.Id, d.Id], m.Tabs.Select(t => t.Id));
+
+        Assert.True(m.MoveGroup(g1.Id, 4));
+        Assert.Equal([b.Id, d.Id, a.Id, c.Id], m.Tabs.Select(t => t.Id));
+        Assert.Equal(4, m.Tabs.Select(t => t.Id).Distinct().Count());
+        Assert.Equal(g2.Id, m.Tabs[0].GroupId);
+        Assert.Null(m.Tabs[1].GroupId);
+        Assert.Equal(g1.Id, m.Tabs[2].GroupId);
+        Assert.Equal(g1.Id, m.Tabs[3].GroupId);
+    }
+
     [Theory]
     [InlineData("tab.pin")]
     [InlineData("group.move")]

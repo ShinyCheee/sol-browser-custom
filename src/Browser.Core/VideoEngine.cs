@@ -10,42 +10,46 @@ namespace Browser.Core;
 public static class VideoEngine
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(12) };
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> Gates = new();
+    private static readonly SemaphoreSlim EnsureGate = new(1, 1);
     public static bool AudioSupported => RuntimeInformation.OSArchitecture != Architecture.X86;
     public sealed record Tools(string Downloader, string? Ffmpeg, string? Runtime = null);
     private sealed record Receipt(string File, string Hash);
 
     public static async Task<Tools> PrepareAsync(string root, Action<string> phase, CancellationToken ct, bool inspectOnly = false)
     {
-        Directory.CreateDirectory(root);
-        var arch = RuntimeInformation.OSArchitecture;
-        var exe = arch == Architecture.Arm64 ? "yt-dlp_arm64.exe" : arch == Architecture.X86 ? "yt-dlp_x86.exe" : "yt-dlp.exe";
-        var downloader = await AcquireAsync(root, "yt-dlp/yt-dlp", exe, false, "yt-dlp", "yt-dlp.exe", phase, ct);
-        var runtime = arch == Architecture.X86 ? null : await AcquireAsync(root, "denoland/deno",
-            "deno-x86_64-pc-windows-msvc.zip", true, "deno", "deno.exe", phase, ct);
-        // FFmpeg win64 fonctionne aussi sous Windows ARM64 par émulation ; pas sous Windows 32 bits.
-        var ffmpeg = arch == Architecture.X86 || inspectOnly ? null : await AcquireAsync(root, "FFmpeg-Builds/FFmpeg-Builds",
-            "ffmpeg-master-latest-win64-lgpl-shared.zip", true, "ffmpeg", "ffmpeg.exe", phase, ct);
-        return new(downloader, ffmpeg, runtime);
+        await EnsureGate.WaitAsync(ct);
+        try
+        {
+            Directory.CreateDirectory(root);
+            var arch = RuntimeInformation.OSArchitecture;
+            var exe = arch == Architecture.Arm64 ? "yt-dlp_arm64.exe" : arch == Architecture.X86 ? "yt-dlp_x86.exe" : "yt-dlp.exe";
+            var downloader = await AcquireAsync(root, "yt-dlp/yt-dlp", exe, false, "yt-dlp", "yt-dlp.exe", phase, ct);
+            var runtime = arch == Architecture.X86 ? null : await AcquireAsync(root, "denoland/deno",
+                "deno-x86_64-pc-windows-msvc.zip", true, "deno", "deno.exe", phase, ct);
+            // FFmpeg win64 fonctionne aussi sous Windows ARM64 par émulation ; pas sous Windows 32 bits.
+            var ffmpeg = arch == Architecture.X86 || inspectOnly ? null : await AcquireAsync(root, "FFmpeg-Builds/FFmpeg-Builds",
+                "ffmpeg-master-latest-win64-lgpl-shared.zip", true, "ffmpeg", "ffmpeg.exe", phase, ct);
+            return new(downloader, ffmpeg, runtime);
+        }
+        finally { EnsureGate.Release(); }
     }
 
-    public static Task<string> PrepareAudioAsync(string root, Action<string> phase, CancellationToken ct)
+    public static async Task<string> PrepareAudioAsync(string root, Action<string> phase, CancellationToken ct)
     {
-        Directory.CreateDirectory(root);
         if (RuntimeInformation.OSArchitecture == Architecture.X86) throw new IOException("Audio encoding requires 64-bit Windows");
-        return AcquireAsync(root, "FFmpeg-Builds/FFmpeg-Builds", "ffmpeg-master-latest-win64-lgpl-shared.zip", true, "ffmpeg", "ffmpeg.exe", phase, ct);
+        await EnsureGate.WaitAsync(ct);
+        try
+        {
+            Directory.CreateDirectory(root);
+            return await AcquireAsync(root, "FFmpeg-Builds/FFmpeg-Builds", "ffmpeg-master-latest-win64-lgpl-shared.zip", true, "ffmpeg", "ffmpeg.exe", phase, ct);
+        }
+        finally { EnsureGate.Release(); }
     }
 
     private static async Task<string> AcquireAsync(string root, string repo, string assetName, bool zip, string tool, string executableName, Action<string> phase, CancellationToken ct)
     {
-        var gate = Gates.GetOrAdd(Path.GetFullPath(root) + ":" + tool, _ => new(1));
-        await gate.WaitAsync(ct);
-        try
-        {
-            await using var installLock = await LockAsync(Path.Combine(root, tool + ".install.lock"), ct);
-            return await AcquireVerifiedAsync(root, repo, assetName, zip, tool, executableName, phase, ct);
-        }
-        finally { gate.Release(); }
+        await using var installLock = await LockAsync(Path.Combine(root, tool + ".install.lock"), ct);
+        return await AcquireVerifiedAsync(root, repo, assetName, zip, tool, executableName, phase, ct);
     }
 
     private static async Task<string> AcquireVerifiedAsync(string root, string repo, string assetName, bool zip, string tool, string executableName, Action<string> phase, CancellationToken ct)
@@ -109,9 +113,10 @@ public static class VideoEngine
 
     private static string Hash(string path)
     {
-        using var stream = File.OpenRead(path);
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         return Convert.ToHexString(SHA256.HashData(stream));
     }
+
     private static async Task<FileStream> LockAsync(string path, CancellationToken ct)
     {
         while (true)
@@ -121,6 +126,7 @@ public static class VideoEngine
             catch (IOException) { await Task.Delay(200, ct); }
         }
     }
+
     private static string? SafeChild(string root, string relative)
     {
         var path = Path.GetFullPath(Path.Combine(root, relative));

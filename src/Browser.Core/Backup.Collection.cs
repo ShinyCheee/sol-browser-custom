@@ -74,7 +74,7 @@ public static partial class Backup
             var written = extra.Values.Sum(bytes => (long)bytes.Length);
             foreach (var (name, path) in paths)
             {
-                using var source = File.OpenRead(path);
+                using var source = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
                 using var entry = zip.CreateEntry(name, CompressionLevel.Optimal).Open();
                 long size = 0;
                 int count;

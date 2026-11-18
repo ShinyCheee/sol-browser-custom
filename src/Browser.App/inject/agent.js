@@ -6,8 +6,11 @@
   let refs = state.refs;
   const clip = (s, n) => { s = (s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n) + '…' : s; };
   const visible = el => { const r = el.getBoundingClientRect(), st = getComputedStyle(el); return r.width > 0 && r.height > 0 && st.visibility !== 'hidden' && st.display !== 'none'; };
-  const sensitive = el => /password|credit-card|cc-|one-time-code/i.test(el.autocomplete || '') || el.type === 'password' ||
-    /password|passwd|otp|cvv|cvc|card.?number/i.test(`${el.name || ''} ${el.id || ''}`);
+  const sensitive = el => {
+    const sec = (el.ownerDocument?.defaultView || window).getComputedStyle(el).webkitTextSecurity;
+    return /password|credit-card|cc-|one-time-code/i.test(el.autocomplete || '') || el.type === 'password' ||
+      Boolean(sec && sec !== 'none') || /password|passwd|otp|cvv|cvc|card.?number/i.test(`${el.name || ''} ${el.id || ''}`);
+  };
   const ref = el => { let i = refs.indexOf(el); if (i < 0) { refs.push(el); i = refs.length - 1; } return `e${state.epoch}_${i + 1}`; };
   const element = r => typeof r === 'string' && r.startsWith(`e${state.epoch}_`) ? refs[Number(r.split('_')[1]) - 1] : null;
   const labelText = node => { const copy = node.cloneNode(true); copy.querySelectorAll('input,select,textarea,button,[contenteditable]').forEach(n => n.remove()); return copy.textContent; };

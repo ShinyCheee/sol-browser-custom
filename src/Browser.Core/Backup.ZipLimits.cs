@@ -30,4 +30,24 @@ public static partial class Backup
 
     private static ushort UInt16(byte[] data, int offset) => BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(offset, 2));
     private static uint UInt32(byte[] data, int offset) => BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(offset, 4));
+
+    /// <summary>Vue décalée sur un flux mémoire afin que ZipArchive écrive des offsets relatifs à 0 après l'en-tête chiffré.</summary>
+    private sealed class OffsetWriteStream(MemoryStream inner, int origin) : Stream
+    {
+        public override bool CanRead => false;
+        public override bool CanSeek => true;
+        public override bool CanWrite => true;
+        public override long Length => inner.Length - origin;
+        public override long Position { get => inner.Position - origin; set => inner.Position = origin + value; }
+        public override void Flush() => inner.Flush();
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override void SetLength(long value) => inner.SetLength(origin + value);
+        public override void Write(byte[] buffer, int offset, int count) => inner.Write(buffer, offset, count);
+        public override void Write(ReadOnlySpan<byte> buffer) => inner.Write(buffer);
+        public override long Seek(long offset, SeekOrigin loc) => loc switch
+        {
+            SeekOrigin.Begin => inner.Seek(origin + offset, SeekOrigin.Begin) - origin,
+            _ => inner.Seek(offset, loc) - origin,
+        };
+    }
 }

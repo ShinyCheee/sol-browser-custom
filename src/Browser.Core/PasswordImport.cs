@@ -96,7 +96,7 @@ public static partial class PasswordImport
         if (rows.Count < 2) return [];
         var head = rows[0].Select(h => h.Trim().TrimStart('\uFEFF').ToLowerInvariant()).ToList();
         int url = head.FindIndex(h => h is "url" or "login_uri" or "origin" or "website" or "adresse"),
-            user = head.FindIndex(h => h is "username" or "login_username" or "login" or "identifiant" or "nom d'utilisateur"),
+            user = head.FindIndex(h => h is "username" or "user name" or "login_username" or "login" or "identifiant" or "nom d'utilisateur"),
             pass = head.FindIndex(h => h is "password" or "login_password" or "mot de passe");
         if (url < 0 || user < 0 || pass < 0) return [];
         var list = new List<ImportedLogin>();

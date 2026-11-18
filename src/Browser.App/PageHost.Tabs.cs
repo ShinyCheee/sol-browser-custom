@@ -25,6 +25,8 @@ public sealed partial class PageHost
         _hiddenSince.Remove(id);
         _discardProtected.Remove(id);
         _suspendRefused.Remove(id);
+        _deviceGeneration.Remove(id);
+        if (_fullScreenTab == id) { _fullScreenTab = null; FullScreenChanged?.Invoke(false); }
         if (_pip == id) ExitPip();
         if (_views.TryGetValue(id, out var closing)) ClearSims(id, closing);
         if (!_views.Remove(id, out var view)) return;
@@ -43,8 +45,6 @@ public sealed partial class PageHost
         if (core is null || _views.Values.Any(v => v.CoreWebView2?.Profile.ProfileName == core.Profile.ProfileName))
         { view.Close(); return; }
         var name = core.Profile.ProfileName;
-        // Fermer pendant l'installation d'une extension peut laisser son attente liée à une vue détruite.
-        _profileReady.Remove(name);
         if (PrivateBrowsing.IsProfile(name)) { view.Close(); return; }
         _closingProfiles[name] = PreserveSessionAsync(view, core, name);
     }
@@ -133,6 +133,13 @@ public sealed partial class PageHost
         secondary.Width = split ? new GridLength(1 - ratio, GridUnitType.Star) : new GridLength(0);
         // L'onglet du lecteur flottant redevient l'onglet affiché : il reprend sa place.
         if (_pip is not null && (_pip == activeId || _pip == secondaryId)) ExitPip();
+        if (_fullScreenTab is { } fsTab && !_visible.Contains(fsTab))
+        {
+            _fullScreenTab = null;
+            if (Core(fsTab) is { ContainsFullScreenElement: true } fsCore)
+                _ = fsCore.ExecuteScriptAsync("document.fullscreenElement && document.exitFullscreen?.()");
+            FullScreenChanged?.Invoke(false);
+        }
         foreach (var (id, view) in _views)
         {
             var column = id == activeId ? 0 : split && id == secondaryId ? 2 : -1;

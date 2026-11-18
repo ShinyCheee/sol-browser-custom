@@ -1,29 +1,15 @@
 "use client";
 // beUI source: Copyright (c) 2026 Saurabh Chauhan, MIT; see ui/licenses/beui-MIT.txt.
 
-import {
-  ArrowLeft,
-  ArrowRight,
-  Check,
-  CircleHelp,
-  LoaderCircle,
-  MessageSquareText,
-  X,
-} from "lucide-react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { AgentDisclosure } from "@/components/agents/agent-disclosure";
-import { ActionSwapRollText } from "@/components/motion/action-swap-roll";
-import { Button } from "@/components/motion/button";
+import { motion } from "motion/react";
 import { Checkbox } from "@/components/motion/checkbox";
 import { Input } from "@/components/motion/input";
 import { RadioGroup, RadioGroupItem } from "@/components/motion/radio";
-import { EASE_OUT, SPRING_SWAP } from "@/lib/ease";
+import { t } from "@/i18n";
+import { SPRING_SWAP } from "@/lib/ease";
 import { cn } from "@/lib/utils";
 import type {
   ApprovalCardAnswer,
-  ApprovalCardAnswers,
-  ApprovalCardProps,
   ApprovalCardQuestion,
   ApprovalCardStatus,
 } from "./types";
@@ -40,12 +26,12 @@ export type {
 export const EMPTY_ANSWER: ApprovalCardAnswer = { selected: [], custom: "" };
 
 export function getStatusLabel(status: ApprovalCardStatus) {
-  if (status === "submitting") return "Submitting";
-  if (status === "approved") return "Approved";
-  if (status === "rejected") return "Rejected";
-  if (status === "changes-requested") return "Changes requested";
-  if (status === "answered") return "Response submitted";
-  return "Input required";
+  if (status === "submitting") return t("Envoi…", "Submitting");
+  if (status === "approved") return t("Autorisé", "Approved");
+  if (status === "rejected") return t("Refusé", "Rejected");
+  if (status === "changes-requested") return t("Modifications demandées", "Changes requested");
+  if (status === "answered") return t("Réponse envoyée", "Response submitted");
+  return t("Action requise", "Input required");
 }
 
 export function getStatusClass(status: ApprovalCardStatus) {
@@ -142,7 +128,10 @@ export function QuestionOptions({
         <Input
           value={custom}
           disabled={disabled}
-          placeholder={question.customPlaceholder ?? "Add another response…"}
+          placeholder={
+            question.customPlaceholder ??
+            t("Ajouter une autre réponse…", "Add another response…")
+          }
           onChange={(value) =>
             onChange({
               selected: question.multiple ? answer.selected : [],
@@ -165,7 +154,7 @@ export function ProgressDots({ current, ids }: { current: number; ids: string[] 
   return (
     <span className="flex gap-1.5">
       <span className="sr-only">
-        Question {current + 1} of {ids.length}
+        {t(`Question ${current + 1} sur ${ids.length}`, `Question ${current + 1} of ${ids.length}`)}
       </span>
       {ids.map((id, index) => (
         <motion.span

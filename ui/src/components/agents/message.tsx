@@ -8,6 +8,7 @@ import {
   type ReactNode,
   useContext,
 } from "react";
+import { t, useLang } from "@/i18n";
 import { EASE_OUT } from "@/lib/ease";
 import { cn } from "@/lib/utils";
 import { MessageSideContext } from "@/components/agents/message-context";
@@ -78,7 +79,12 @@ export function Message({
   style,
   ...props
 }: MessageProps) {
+  useLang();
   const reduce = useReducedMotion() ?? false;
+  const defaultAriaLabel =
+    from === "user"
+      ? t("Votre message", "User message")
+      : t("Message de l’assistant", "Assistant message");
 
   return (
     <MessageSideContext.Provider value={from === "user" ? "end" : "start"}>
@@ -86,7 +92,7 @@ export function Message({
         <motion.article
           data-slot="message"
           data-from={from}
-          aria-label={props["aria-label"] ?? `${from} message`}
+          aria-label={props["aria-label"] ?? defaultAriaLabel}
           initial={
             initial ??
             (animateIn && !reduce
@@ -237,10 +243,12 @@ export function MessageMarker({ className, ...props }: MessageMarkerProps) {
 }
 
 export function MessageTyping({
-  label = "Responding",
+  label,
   className,
   ...props
 }: MessageTypingProps) {
+  useLang();
+  const resolvedLabel = label ?? t("Réponse en cours", "Responding");
   const reduce = useReducedMotion() ?? false;
 
   return (
@@ -249,7 +257,7 @@ export function MessageTyping({
       className={cn("inline-flex h-5 items-center gap-1", className)}
       {...props}
     >
-      <span className="sr-only">{label}</span>
+      <span className="sr-only">{resolvedLabel}</span>
       {[0, 1, 2].map((index) => (
         <motion.span
           key={index}

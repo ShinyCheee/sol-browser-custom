@@ -4,12 +4,12 @@ export type SearchableCommand = {
   keywords?: string[];
 };
 
+function fold(value: string) {
+  return value.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
+}
+
 function normalize(value: string) {
-  return value
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .normalize("NFKD")
-    .replace(/\p{M}/gu, "")
-    .toLowerCase()
+  return fold(value.replace(/([a-z])([A-Z])/g, "$1 $2"))
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
 }
@@ -35,11 +35,24 @@ function tokenScore(token: string, field: string) {
 
 /** Match every query word across fields and put direct name matches first. */
 export function searchCommands<T extends SearchableCommand>(items: T[], query: string): T[] {
+  const raw = fold(query.trim());
+  if (!raw) return items;
+  const exactPunctuation = /[/:.#?]/.test(raw);
   const normalized = normalize(query);
-  if (!normalized) return items;
+  if (!normalized) {
+    return items.filter((item) =>
+      [item.label, item.group ?? "", ...(item.keywords ?? [])].some((f) => fold(f).includes(raw)),
+    );
+  }
   const tokens = normalized.split(/\s+/);
   return items
     .map((item) => {
+      if (
+        exactPunctuation &&
+        ![item.label, item.group ?? "", ...(item.keywords ?? [])].some((f) => fold(f).includes(raw))
+      ) {
+        return { item, score: 0 };
+      }
       const label = normalize(item.label);
       const fields = [label, normalize(item.group ?? ""), ...(item.keywords ?? []).map(normalize)];
       let score = label === normalized ? 10000 : label.startsWith(normalized) ? 2000 : 0;

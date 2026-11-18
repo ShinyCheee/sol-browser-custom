@@ -5,33 +5,41 @@ namespace Browser.App;
 
 public sealed partial class PageHost
 {
+    private readonly SemaphoreSlim _extensionActionGate = new(1, 1);
     private (string Tab, string Marker, TaskCompletionSource<bool> Completion)? _extensionAction;
 
     public async Task<bool> InvokeExtensionActionAsync(string tabId, string marker)
     {
-        if (CoreOf(tabId) is not { } core || !_ready.Contains(tabId)) return false;
+        await _extensionActionGate.WaitAsync();
         try
         {
-            await core.ExecuteScriptAsync("globalThis.__solNativeContextMenu?.(true)");
-            for (var attempt = 0; attempt < 3; attempt++)
+            if (CoreOf(tabId) is not { } core || !_ready.Contains(tabId)) return false;
+            try
             {
-                var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-                _extensionAction = (tabId, marker, completion);
-                await core.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",
-                    """{"type":"mousePressed","button":"right","buttons":2,"x":4,"y":4,"clickCount":1}""");
-                await core.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",
-                    """{"type":"mouseReleased","button":"right","x":4,"y":4,"clickCount":1}""");
-                if (await completion.Task.WaitAsync(TimeSpan.FromSeconds(5))) return true;
-                await Task.Delay(150 * (attempt + 1));
+                await core.ExecuteScriptAsync("globalThis.__solNativeContextMenu?.(true)");
+                for (var attempt = 0; attempt < 3; attempt++)
+                {
+                    var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    _extensionAction = (tabId, marker, completion);
+                    await core.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",
+                        """{"type":"mousePressed","button":"right","buttons":2,"x":4,"y":4,"clickCount":1}""");
+                    await core.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",
+                        """{"type":"mouseReleased","button":"right","x":4,"y":4,"clickCount":1}""");
+                    if (await completion.Task.WaitAsync(TimeSpan.FromSeconds(5))) return true;
+                    await Task.Delay(150 * (attempt + 1));
+                }
+                return false;
             }
-            return false;
+            catch (Exception error) when (error is TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException)
+            { return false; }
+            finally
+            {
+                _extensionAction = null;
+                try { await core.ExecuteScriptAsync("globalThis.__solNativeContextMenu?.(false)"); }
+                catch (Exception error) when (error is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
+            }
         }
-        finally
-        {
-            _extensionAction = null;
-            try { await core.ExecuteScriptAsync("globalThis.__solNativeContextMenu?.(false)"); }
-            catch (Exception error) when (error is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
-        }
+        finally { _extensionActionGate.Release(); }
     }
 
     private bool HandleExtensionAction(string tabId, CoreWebView2ContextMenuRequestedEventArgs args)

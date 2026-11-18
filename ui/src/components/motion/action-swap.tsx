@@ -251,6 +251,3 @@ export function ActionSwapText({
     </span>
   );
 }
-
-
-export {ActionSwapIcon,ActionSwapButton} from "./action-swap-controls";

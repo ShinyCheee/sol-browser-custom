@@ -114,8 +114,7 @@ export function installTooltips() {
   let timer = 0;
   let hovered: HTMLElement | null = null;
   const hide = () => { clearTimeout(timer); hovered = null; send({ type: 'ui.tooltip' }); };
-  document.addEventListener('pointerover', e => {
-    const button = (e.target as Element).closest<HTMLElement>('button, [role="button"], [data-sol-tooltip]');
+  const show = (button: HTMLElement | null) => {
     if (button === hovered) return;
     hide();
     if (!button) return;
@@ -124,16 +123,38 @@ export function installTooltips() {
     hovered = button;
     timer = window.setTimeout(() => {
       const box = button.getBoundingClientRect();
-      send({ type: 'ui.tooltip', title, x: box.x, y: box.y, width: box.width, height: box.height });
+      if (box.width > 0 && box.height > 0)
+        send({ type: 'ui.tooltip', title, x: box.x, y: box.y, width: box.width, height: box.height });
     }, 500);
+  };
+  document.addEventListener('pointerover', e => {
+    show((e.target as Element).closest<HTMLElement>('button, [role="button"], [data-sol-tooltip]'));
   });
   document.addEventListener('pointerout', e => {
+    if (hovered && (!(e.relatedTarget instanceof Node) || !hovered.contains(e.relatedTarget))) hide();
+  });
+  document.addEventListener('focusin', e => {
+    const target = (e.target as Element | null)?.closest<HTMLElement>('button, [role="button"], [data-sol-tooltip]');
+    if (target?.matches(':focus-visible')) show(target);
+  });
+  document.addEventListener('focusout', e => {
     if (hovered && (!(e.relatedTarget instanceof Node) || !hovered.contains(e.relatedTarget))) hide();
   });
   document.addEventListener('pointerdown', hide, true);
   document.addEventListener('wheel', hide, { passive: true });
   document.addEventListener('keydown', hide);
   window.addEventListener('blur', hide);
+}
+
+export function anchorBox(element: HTMLElement): DOMRect {
+  const rect = element.getBoundingClientRect();
+  if (rect.width > 0) return rect;
+  const fallback =
+    document.querySelector<HTMLElement>('button[data-action="settings.open"]') ??
+    Array.from(document.querySelectorAll<HTMLElement>('button[data-action]')).find(
+      b => b.getBoundingClientRect().width > 0,
+    );
+  return fallback?.getBoundingClientRect() ?? rect;
 }
 
 // L'hôte envoie soit l'état complet, soit un événement ponctuel { event: "…" }.
@@ -172,14 +193,32 @@ export function onMessage(callback: (data: unknown) => void) {
   return () => webview?.removeEventListener('message', handler);
 }
 
+let invokeListening = false;
+function ensureInvokeListener() {
+  if (invokeListening) return;
+  invokeListening = true;
+  webview?.addEventListener('message', (e: MessageEvent) => {
+    const event = e.data as HostEvent | null;
+    if (!event || event.event !== 'invoke-action' || !event.data) return;
+    const button = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-action]')).find(
+      b => b.dataset.action === event.data,
+    );
+    if (!button || button.disabled) return;
+    if (!button.closest('[inert]')) {
+      button.click();
+    } else {
+      const box = anchorBox(button);
+      send({ type: event.data, x: box.right, y: box.bottom + 6 });
+    }
+  });
+}
+
 export function onState(callback: (state: State) => void, onEvent?: (event: HostEvent) => void) {
+  ensureInvokeListener();
   return onMessage(data => {
     const event = data as HostEvent;
-    if (event.event === 'invoke-action' && event.data) {
-      Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-action]')).find(button => button.dataset.action === event.data)?.click();
-      return;
-    }
-    if (typeof (data as HostEvent).event === 'string') onEvent?.(data as HostEvent);
+    if (event.event === 'invoke-action') return;
+    if (typeof event.event === 'string') onEvent?.(event);
     else callback(data as State);
   });
 }

@@ -16,6 +16,7 @@ import {
 } from "react";
 import { EASE_OUT, EASE_OUT_CSS, SPRING_LAYOUT, SPRING_PRESS } from "@/lib/ease";
 import { PresenceGate } from "@/lib/presence-gate";
+import { t } from "@/i18n";
 import { cn } from "@/lib/utils";
 
 export type AlertVariant = "default" | "info" | "success" | "warning" | "destructive";
@@ -219,7 +220,7 @@ export function AlertClose({ className, children, onClick, ...props }: AlertClos
   return (
     <motion.button
       type="button"
-      aria-label="Dismiss alert"
+      aria-label={t("Fermer l’alerte", "Dismiss alert")}
       {...props}
       tabIndex={props.tabIndex ?? 0}
       data-slot="alert-close"

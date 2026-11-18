@@ -21,13 +21,18 @@ public sealed partial class UiBridge
 
             if (json == "\"ui.painted\"") { target.Opacity = 1; Painted?.Invoke(); return; }
 
-            if (SidebarHost is { } host && json.Contains("\"sidebar.toggle\"", StringComparison.Ordinal))
+            if (SidebarHost is { } host && json == "\"sidebar.toggle\"")
             {
                 host.Toggle();
                 return;
             }
             if (CommandParser.Parse(json) is { } command)
             {
+                if (command.Type == "sidebar.toggle")
+                {
+                    SidebarHost?.Toggle();
+                    return;
+                }
                 if (command.Type == "sidebar.motion.done")
                 {
                     // Anciennes vues : la disposition commune ne dépend plus de cette confirmation.

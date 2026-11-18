@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Security.Cryptography;
@@ -11,6 +12,8 @@ public static class ExtensionPackage
     /// <summary>Services de paquets et de mises à jour du Chrome Web Store et de Microsoft Edge Add-ons.</summary>
     public const string StoreUpdates = "https://clients2.google.com/service/update2/crx";
     public const string EdgeStoreUpdates = "https://edge.microsoft.com/extensionwebstorebase/v1/crx";
+    public const long MaxEntryBytes = 256L * 1024 * 1024;
+    public const long MaxTotalBytes = 512L * 1024 * 1024;
 
     /// <summary>Un manifeste d'extension peut porter des commentaires et des virgules finales : les navigateurs les acceptent.</summary>
     public static readonly System.Text.Json.JsonDocumentOptions Lenient = new() { CommentHandling = System.Text.Json.JsonCommentHandling.Skip, AllowTrailingCommas = true };
@@ -68,37 +71,67 @@ public static class ExtensionPackage
         Extract(stream, id, destination);
     }
 
-    /// <summary>Vérifie et extrait sur disque, sans plafond de taille ni copie du paquet en mémoire.</summary>
-    public static void Extract(Stream package, string id, string destination)
+    /// <summary>Vérifie et extrait sur disque, avec plafonds réels d'octets décompressés et sans copie du paquet en mémoire.</summary>
+    public static void Extract(Stream package, string id, string destination) =>
+        Extract(package, id, destination, MaxEntryBytes, MaxTotalBytes);
+
+    public static void Extract(Stream package, string id, string destination, long maxEntryBytes, long maxTotalBytes)
     {
         if (!ExtensionCatalog.IsId(id) || !package.CanRead || !package.CanSeek || package.Length < 12)
             throw new InvalidDataException("Paquet CRX3 invalide.");
-        package.Position = 0;
-        Span<byte> prefix = stackalloc byte[12];
-        package.ReadExactly(prefix);
-        if (!prefix[..4].SequenceEqual("Cr24"u8) || BinaryPrimitives.ReadUInt32LittleEndian(prefix[4..]) != 3)
-            throw new InvalidDataException("Paquet CRX3 invalide.");
-        var headerSize = BinaryPrimitives.ReadUInt32LittleEndian(prefix[8..]);
-        // Only the small protobuf envelope is bounded, never the signed archive.
-        if (headerSize > 1024 * 1024 || headerSize >= package.Length - 12) throw new InvalidDataException("En-tête CRX3 invalide.");
-        var envelope = new byte[(int)headerSize];
-        package.ReadExactly(envelope);
-        var header = Fields(envelope);
-        var signed = header.SingleOrDefault(f => f.Tag == 10000).Data ?? throw new InvalidDataException("Signature absente.");
-        var expected = Fields(signed).SingleOrDefault(f => f.Tag == 1).Data;
-        if (expected is not { Length: 16 } || Id(expected) != id) throw new InvalidDataException("Le paquet ne correspond pas à cette extension.");
-        var archiveOffset = 12 + (int)headerSize;
+        try
+        {
+            package.Position = 0;
+            Span<byte> prefix = stackalloc byte[12];
+            package.ReadExactly(prefix);
+            if (!prefix[..4].SequenceEqual("Cr24"u8) || BinaryPrimitives.ReadUInt32LittleEndian(prefix[4..]) != 3)
+                throw new InvalidDataException("Paquet CRX3 invalide.");
+            var headerSize = BinaryPrimitives.ReadUInt32LittleEndian(prefix[8..]);
+            if (headerSize > 1024 * 1024 || headerSize >= package.Length - 12) throw new InvalidDataException("En-tête CRX3 invalide.");
+            var envelope = new byte[(int)headerSize];
+            package.ReadExactly(envelope);
+            var header = Fields(envelope);
+            var signed = header.SingleOrDefault(f => f.Tag == 10000).Data ?? throw new InvalidDataException("Signature absente.");
+            var expected = Fields(signed).SingleOrDefault(f => f.Tag == 1).Data;
+            if (expected is not { Length: 16 } || Id(expected) != id) throw new InvalidDataException("Le paquet ne correspond pas à cette extension.");
+            var archiveOffset = 12 + (int)headerSize;
+            var hash = ComputePayloadHash(package, signed);
+            var key = VerifySignature(header, id, hash) ?? throw new InvalidDataException("Signature de l’extension invalide.");
+            ExtractZip(package, archiveOffset, destination, maxEntryBytes, maxTotalBytes);
+            var manifestPath = Path.Combine(destination, "manifest.json");
+            if (!File.Exists(manifestPath)) throw new InvalidDataException("Manifeste absent.");
+            var manifest = JsonNode.Parse(File.ReadAllText(manifestPath), null, Lenient)?.AsObject() ?? throw new InvalidDataException("Manifeste absent.");
+            if (manifest["theme"] is not null) throw new InvalidDataException("C’est un thème pour Chrome : Sol n’installe que les extensions.");
+            manifest["key"] = Convert.ToBase64String(key);
+            File.WriteAllText(manifestPath, manifest.ToJsonString());
+            if (ExtensionCatalog.Read(destination, id) is null) throw new InvalidDataException("Manifeste d’extension invalide.");
+        }
+        catch (Exception e) when (e is CryptographicException or OverflowException or InvalidOperationException or System.Text.Json.JsonException)
+        {
+            throw new InvalidDataException("Paquet CRX3 invalide.", e);
+        }
+    }
+
+    private static byte[] ComputePayloadHash(Stream package, byte[] signed)
+    {
         using var payload = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         payload.AppendData("CRX3 SignedData\0"u8);
         Span<byte> size = stackalloc byte[4];
         BinaryPrimitives.WriteInt32LittleEndian(size, signed.Length);
         payload.AppendData(size);
         payload.AppendData(signed);
-        var buffer = new byte[65536];
-        int count;
-        while ((count = package.Read(buffer)) != 0) payload.AppendData(buffer.AsSpan(0, count));
-        var hash = payload.GetHashAndReset();
-        byte[]? key = null;
+        var buffer = ArrayPool<byte>.Shared.Rent(65536);
+        try
+        {
+            int count;
+            while ((count = package.Read(buffer, 0, 65536)) != 0) payload.AppendData(buffer.AsSpan(0, count));
+            return payload.GetHashAndReset();
+        }
+        finally { ArrayPool<byte>.Shared.Return(buffer); }
+    }
+
+    private static byte[]? VerifySignature(List<(int Tag, byte[] Data)> header, string id, byte[] hash)
+    {
         foreach (var proof in header.Where(f => f.Tag is 2 or 3))
         {
             var fields = Fields(proof.Data);
@@ -116,32 +149,52 @@ public static class ExtensionPackage
                 using var ec = ECDsa.Create(); ec.ImportSubjectPublicKeyInfo(publicKey, out _);
                 valid = ec.VerifyHash(hash, signature, DSASignatureFormat.Rfc3279DerSequence);
             }
-            if (valid) { key = publicKey; break; }
+            if (valid) return publicKey;
         }
-        if (key is null) throw new InvalidDataException("Signature de l’extension invalide.");
+        return null;
+    }
+
+    private static void ExtractZip(Stream package, int archiveOffset, string destination, long maxEntryBytes, long maxTotalBytes)
+    {
         using var archive = new ExtensionArchiveStream(package, archiveOffset);
         using var zip = new ZipArchive(archive, ZipArchiveMode.Read);
         var root = Path.GetFullPath(destination) + Path.DirectorySeparatorChar;
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (zip.Entries.Count > 20000) throw new InvalidDataException("Trop de fichiers dans l’extension.");
-        foreach (var entry in zip.Entries)
+        long totalBytes = 0;
+        var buffer = ArrayPool<byte>.Shared.Rent(81920);
+        try
         {
-            var target = Path.GetFullPath(Path.Combine(destination, entry.FullName));
-            if (!target.StartsWith(root, StringComparison.OrdinalIgnoreCase) || entry.FullName.Contains(':')
-                || !names.Add(target))
-                throw new InvalidDataException("Archive d’extension non sûre.");
-            if (entry.FullName.EndsWith('/')) { Directory.CreateDirectory(target); continue; }
-            if (entry.FullName.StartsWith("_metadata/", StringComparison.Ordinal)) continue;
-            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-            entry.ExtractToFile(target);
+            foreach (var entry in zip.Entries)
+            {
+                var target = Path.GetFullPath(Path.Combine(destination, entry.FullName));
+                if (!target.StartsWith(root, StringComparison.OrdinalIgnoreCase) || entry.FullName.Contains(':') || !names.Add(target))
+                    throw new InvalidDataException("Archive d’extension non sûre.");
+                if (entry.FullName.EndsWith('/')) { Directory.CreateDirectory(target); continue; }
+                if (entry.FullName.StartsWith("_metadata/", StringComparison.Ordinal)) continue;
+                if (entry.Length > maxEntryBytes || entry.Length > maxTotalBytes - totalBytes)
+                    throw new InvalidDataException("Extension décompressée trop volumineuse.");
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                long entryBytes = 0;
+                try
+                {
+                    using var source = entry.Open();
+                    using var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                    int read;
+                    while ((read = source.Read(buffer, 0, 81920)) > 0)
+                    {
+                        entryBytes += read; totalBytes += read;
+                        if (entryBytes > maxEntryBytes || totalBytes > maxTotalBytes)
+                            throw new InvalidDataException("Extension décompressée trop volumineuse.");
+                        output.Write(buffer, 0, read);
+                    }
+                    if (entry.Length < 0 || entryBytes != entry.Length)
+                        throw new InvalidDataException("Taille d’entrée d’extension incohérente.");
+                }
+                catch { if (File.Exists(target)) File.Delete(target); throw; }
+            }
         }
-        var manifestPath = Path.Combine(destination, "manifest.json");
-        if (!File.Exists(manifestPath)) throw new InvalidDataException("Manifeste absent.");
-        var manifest = JsonNode.Parse(File.ReadAllText(manifestPath), null, Lenient)?.AsObject() ?? throw new InvalidDataException("Manifeste absent.");
-        if (manifest["theme"] is not null) throw new InvalidDataException("C’est un thème pour Chrome : Sol n’installe que les extensions.");
-        manifest["key"] = Convert.ToBase64String(key); // identité stable et autorisation native messaging d’origine
-        File.WriteAllText(manifestPath, manifest.ToJsonString());
-        if (ExtensionCatalog.Read(destination, id) is null) throw new InvalidDataException("Manifeste d’extension invalide.");
+        finally { ArrayPool<byte>.Shared.Return(buffer); }
     }
 
     private static string Id(ReadOnlySpan<byte> bytes)
@@ -151,7 +204,6 @@ public static class ExtensionPackage
         return new string(chars);
     }
 
-    // Les champs protobuf du CRX3 sont des octets ; les champs inconnus primitifs sont ignorés.
     private static List<(int Tag, byte[] Data)> Fields(byte[] bytes)
     {
         var result = new List<(int, byte[])>();

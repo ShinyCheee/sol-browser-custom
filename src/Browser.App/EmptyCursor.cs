@@ -9,7 +9,7 @@ internal static class EmptyCursor
     {
         var mask = new byte[128];
         Array.Fill(mask, (byte)255);
-        var handle = CreateCursor(0, 0, 0, 32, 32, mask, new byte[128]);
+        var handle = Win32Interop.CreateCursor(0, 0, 0, 32, 32, mask, new byte[128]);
         if (handle == 0) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
         nint result = 0;
         try
@@ -17,7 +17,7 @@ internal static class EmptyCursor
             InputCursor.As<IInputCursorStaticsInterop>().CreateFromHCursor(handle, out result);
             return WinRT.MarshalInterface<InputCursor>.FromAbi(result);
         }
-        finally { if (result != 0) Marshal.Release(result); DestroyCursor(handle); }
+        finally { if (result != 0) Marshal.Release(result); Win32Interop.DestroyCursor(handle); }
     }
     [ComImport, Guid("ac6f5065-90c4-46ce-beb7-05e138e54117"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IInputCursorStaticsInterop
@@ -27,6 +27,4 @@ internal static class EmptyCursor
         void GetTrustLevel(out int level);
         void CreateFromHCursor(nint cursor, out nint result);
     }
-    [DllImport("user32.dll", SetLastError = true)] private static extern nint CreateCursor(nint instance, int x, int y, int width, int height, byte[] andMask, byte[] xorMask);
-    [DllImport("user32.dll")] private static extern bool DestroyCursor(nint cursor);
 }

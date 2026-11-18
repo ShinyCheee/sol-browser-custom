@@ -20,7 +20,7 @@ public static class VoiceMarkdown
             var atStart = prefix.Length <= 3 && prefix.Trim().Length == 0;
             if (fence != '\0')
             {
-                if (ch == fence && run >= fenceLength && atStart)
+                if (ch == fence && run >= fenceLength && atStart && ValidClosingFence(text, i + run))
                 {
                     for (var k = 0; k < run; k++) output[i + k] = ' ';
                     fence = '\0'; openedAt = -1; i += run; continue;
@@ -38,7 +38,7 @@ public static class VoiceMarkdown
                 output[i] = ' '; if (ch == '\n') lineStart = i + 1;
                 i++; continue;
             }
-            if (ch is '`' or '~' && run >= 3 && atStart)
+            if (ch is '`' or '~' && run >= 3 && atStart && (ch != '`' || !HasBacktickOnLine(text, i + run)))
             {
                 fence = ch; fenceLength = run; openedAt = i;
                 for (var k = 0; k < run; k++) output[i + k] = ' ';
@@ -55,5 +55,19 @@ public static class VoiceMarkdown
         }
         incomplete = openedAt;
         return new string(output);
+    }
+
+    private static bool ValidClosingFence(string text, int afterFence)
+    {
+        for (var i = afterFence; i < text.Length && text[i] != '\n'; i++)
+            if (text[i] is not (' ' or '\t' or '\r')) return false;
+        return true;
+    }
+
+    private static bool HasBacktickOnLine(string text, int from)
+    {
+        for (var i = from; i < text.Length && text[i] != '\n'; i++)
+            if (text[i] == '`') return true;
+        return false;
     }
 }

@@ -1,15 +1,8 @@
-import type { ReactNode, TextareaHTMLAttributes } from "react";
+import type { ReactNode, Ref, TextareaHTMLAttributes } from "react";
+
 export interface PromptModel {
   value: string;
   label: ReactNode;
-  icon?: ReactNode;
-  disabled?: boolean;
-}
-
-export interface PromptAction {
-  value: string;
-  label: ReactNode;
-  description?: ReactNode;
   icon?: ReactNode;
   disabled?: boolean;
 }
@@ -25,13 +18,12 @@ export interface PromptInputProps extends Omit<
   model?: string;
   defaultModel?: string;
   onModelChange?: (model: string) => void;
-  actions?: PromptAction[];
-  onAction?: (action: string) => void;
   onSubmit?: (value: string, model?: string) => void | Promise<void>;
   loading?: boolean;
   onStop?: () => void;
   minRows?: number;
   maxRows?: number;
   leadingAction?: ReactNode;
+  textareaRef?: Ref<HTMLTextAreaElement>;
   className?: string;
 }

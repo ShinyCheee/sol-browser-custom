@@ -1,28 +1,31 @@
-import {useEffect,useLayoutEffect,useRef,useState} from 'react';
-import {interfaceScale,onMessage,send} from './bridge';
-import {useLang} from './i18n';
-import type {Content} from './PopupTypes';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { Card } from '@/components/motion/card';
+import { MorphingModal } from '@/components/motion/morphing-modal';
+import { interfaceScale, onMessage, send } from './bridge';
+import { useLang } from './i18n';
+import type { Content } from './PopupTypes';
 import PopupViews from './PopupViews';
-import {MorphingModal} from '@/components/motion/morphing-modal';
-import {Card} from '@/components/motion/card';
+
 export default function Popup() {
   const [content, setContent] = useState<Content | null>(null);
   const [selected, setSelected] = useState(-1);
   const [settingsSection, setSettingsSection] = useState('general');
   const root = useRef<HTMLDivElement>(null);
-  const contentRoot = useRef<HTMLDivElement>(null);
   const fresh = useRef(false);
   const current = useRef<Content | null>(null);
   useLang();
-  const [opening, setOpening] = useState(0); // change à chaque ouverture : rejoue l'apparition
+  const [opening, setOpening] = useState(0);
 
   useLayoutEffect(() => {
     let leaving = 0;
     const off = onMessage(data => {
       const select = (data as { select?: unknown }).select;
       if (typeof select === 'number') return setSelected(select);
-      // « fresh » précède le contenu d'une nouvelle ouverture : celui-ci jouera son apparition.
-      if ((data as { fresh?: boolean }).fresh) {window.clearTimeout(leaving);fresh.current = true;return;}
+      if ((data as { fresh?: boolean }).fresh) {
+        window.clearTimeout(leaving);
+        fresh.current = true;
+        return;
+      }
       const isFresh = fresh.current;
       if (isFresh) setOpening(n => n + 1);
       fresh.current = false;
@@ -33,20 +36,25 @@ export default function Popup() {
       setContent(next);
     });
     const close = () => send({ type: 'popup.close' });
-    // Perdre le curseur referme la vue, mais pas tout de suite : un clic dans la vue lui fait perdre puis
-    // reprendre le curseur, et une fermeture immédiate avalerait ce clic.
     const focused = () => window.clearTimeout(leaving);
     const blurred = () => {
       window.clearTimeout(leaving);
-      leaving = window.setTimeout(() => current.current?.popup !== 'ai-action' && current.current?.popup !== 'videos' && !document.hasFocus() && close(), 150);
+      leaving = window.setTimeout(
+        () =>
+          current.current?.popup !== 'ai-action' &&
+          current.current?.popup !== 'videos' &&
+          !document.hasFocus() &&
+          close(),
+        150,
+      );
     };
     window.addEventListener('blur', blurred);
     window.addEventListener('focus', focused);
-    const key = (e: KeyboardEvent) => e.key === 'Escape' && close();
+    const key = (e: KeyboardEvent) => {
+      if (!e.defaultPrevented && e.key === 'Escape') close();
+    };
     window.addEventListener('keydown', key);
-    // The native host loads this view only when first needed; listeners must exist before replay. Sent from a layout
-    // effect: in a still-hidden view the engine delays passive effects by seconds, and the menu would open late or never.
-    send({type:'ui.ready'});
+    send({ type: 'ui.ready' });
     return () => {
       off();
       window.clearTimeout(leaving);
@@ -56,8 +64,6 @@ export default function Popup() {
     };
   }, []);
 
-  // La vue annonce sa hauteur à chaque changement, y compris quand l'hôte vient de changer sa largeur :
-  // le contenu se remet alors en page et sa hauteur n'est plus celle du premier rendu.
   useLayoutEffect(() => {
     const el = root.current;
     if (!content || !el) return;
@@ -66,9 +72,44 @@ export default function Popup() {
     report();
     const observer = new ResizeObserver(report);
     observer.observe(el);
-    return () => { observer.disconnect(); window.removeEventListener('ui-scale', report); };
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('ui-scale', report);
+    };
   }, [content, settingsSection]);
 
+  useLayoutEffect(() => {
+    const el = root.current;
+    if (!content || !el) return;
+    if (content.popup === 'suggestions' || content.popup === 'menu' || content.popup === 'palette') return;
+    const frame = requestAnimationFrame(() => {
+      const surface = root.current;
+      if (!surface || surface.contains(document.activeElement)) return;
+      const candidates = surface.querySelectorAll<HTMLElement>(
+        '[autofocus]:not([disabled]), .library-search:not([disabled]), [role="tab"][aria-selected="true"]:not([disabled]), input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex="0"]',
+      );
+      const target = Array.from(candidates).find(node => node.checkVisibility?.() !== false);
+      target?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [opening, content?.popup]);
 
-return content?<MorphingModal embedded viewId={`${content.popup}:${opening}`} onClose={()=>send({type:'popup.close'})} className="beui-native-panel"><Card ref={root} size="compact" className="sol-surface-card sol-popup-card"><PopupViews content={content} rootRef={contentRoot} opening={opening} selected={selected} settingsSection={settingsSection} setSettingsSection={setSettingsSection}/></Card></MorphingModal>:null;
+  return content ? (
+    <MorphingModal
+      embedded
+      viewId={`${content.popup}:${opening}`}
+      onClose={() => send({ type: 'popup.close' })}
+      className="beui-native-panel"
+    >
+      <Card ref={root} size="compact" className="sol-surface-card sol-popup-card">
+        <PopupViews
+          content={content}
+          opening={opening}
+          selected={selected}
+          settingsSection={settingsSection}
+          setSettingsSection={setSettingsSection}
+        />
+      </Card>
+    </MorphingModal>
+  ) : null;
 }

@@ -49,10 +49,18 @@ public sealed partial class BrowserController
         });
     }
 
+    private static readonly HttpClient PdfHttp = new(new SocketsHttpHandler
+    {
+        UseCookies = false,
+        AllowAutoRedirect = false,
+        AutomaticDecompression = System.Net.DecompressionMethods.All,
+    })
+    { Timeout = TimeSpan.FromSeconds(20) };
+
     private async Task<List<ChatAttachment>> CaptureForChatAsync()
     {
-        var tabId = _tabs.ActiveId;
-        if (_tabs.Tabs.Any(t => t.Id == tabId && t.Private) || _pages.CoreOf(tabId) is not { } core || !IsWebAddress(core.Source))
+        if (_tabs.ActiveId is not { } tabId || _tabs.Tabs.Any(t => t.Id == tabId && t.Private)
+            || _pages.CoreOf(tabId) is not { } core || !IsWeb(core.Source))
             throw new InvalidDataException();
         var source = core.Source;
         // JPEG : une capture en très haute définition reste assez légère pour être envoyée.
@@ -88,15 +96,41 @@ public sealed partial class BrowserController
         {
             byte[] bytes;
             if (uri.IsFile) bytes = await File.ReadAllBytesAsync(uri.LocalPath, ct);
-            else
+            else if (PermissionStore.OriginOf(uri.AbsoluteUri) is { } origin)
             {
-                using var request = new HttpRequestMessage(HttpMethod.Get, uri);
-                var cookies = await core.Profile.CookieManager.GetCookiesAsync(uri.AbsoluteUri);
-                if (cookies.Count > 0) request.Headers.Add("Cookie", string.Join("; ", cookies.Select(c => c.Name + "=" + c.Value)));
-                using var response = await LinkHttp.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
-                if (!response.IsSuccessStatusCode || response.Content.Headers.ContentLength > ChatAttachmentFiles.MaxFileBytes) return [];
-                bytes = await response.Content.ReadAsByteArrayAsync(ct);
+                var current = uri;
+                byte[]? downloaded = null;
+                for (var hop = 0; hop <= 5; hop++)
+                {
+                    using var request = new HttpRequestMessage(HttpMethod.Get, current);
+                    var cookies = await core.Profile.CookieManager.GetCookiesAsync(current.AbsoluteUri);
+                    if (cookies.Count > 0)
+                        request.Headers.TryAddWithoutValidation("Cookie", string.Join("; ", cookies.Select(c => c.Name + "=" + c.Value)));
+                    using var response = await PdfHttp.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+                    if ((int)response.StatusCode is >= 300 and < 400 && response.Headers.Location is { } location)
+                    {
+                        if (hop == 5 || !Uri.TryCreate(current, location, out var next) || PermissionStore.OriginOf(next.AbsoluteUri) != origin)
+                            return [];
+                        current = next;
+                        continue;
+                    }
+                    if (!response.IsSuccessStatusCode || response.Content.Headers.ContentLength > ChatAttachmentFiles.MaxFileBytes) return [];
+                    using var stream = await response.Content.ReadAsStreamAsync(ct);
+                    using var memory = new MemoryStream();
+                    var chunk = new byte[16384];
+                    int read;
+                    while ((read = await stream.ReadAsync(chunk, ct)) > 0)
+                    {
+                        if (memory.Length + read > ChatAttachmentFiles.MaxFileBytes) return [];
+                        memory.Write(chunk, 0, read);
+                    }
+                    downloaded = memory.ToArray();
+                    break;
+                }
+                if (downloaded is null) return [];
+                bytes = downloaded;
             }
+            else return [];
             var name = Path.GetFileName(uri.LocalPath);
             return Attachments(await ChatAttachmentFiles.ReadAsync(name.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) ? name : name + ".pdf", bytes)).Select(a => a with { Silent = true }).ToList();
         }

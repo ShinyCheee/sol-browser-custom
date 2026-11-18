@@ -112,7 +112,13 @@ public static class BrowserImport
         var copy = Path.Combine(tempDir, $"import-{Guid.NewGuid():N}.db");
         try
         {
-            File.Copy(source, copy, overwrite: true);
+            foreach (var suffix in new[] { "", "-wal", "-journal" })
+            {
+                if (!File.Exists(source + suffix)) continue;
+                using var from = new FileStream(source + suffix, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var to = new FileStream(copy + suffix, FileMode.Create, FileAccess.Write, FileShare.None);
+                from.CopyTo(to);
+            }
             using (var db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = copy, Mode = SqliteOpenMode.ReadOnly, Pooling = false }.ToString()))
             {
                 db.Open();
@@ -131,7 +137,8 @@ public static class BrowserImport
         catch (Exception e) when (e is IOException or SqliteException or UnauthorizedAccessException) { /* base illisible : pas d'historique repris */ }
         finally
         {
-            try { File.Delete(copy); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+            foreach (var suffix in new[] { "", "-wal", "-journal", "-shm" })
+                try { File.Delete(copy + suffix); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         }
         return list;
     }

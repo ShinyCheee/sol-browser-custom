@@ -31,6 +31,7 @@ public sealed partial class PageHost
     private readonly Dictionary<string, string> _mode = new();    // nom de l'appareil, ou « compare »
     private readonly Dictionary<string, (double Width, double Height, double Scale)> _fit = new();
     private readonly Dictionary<string, (string Name, bool Landscape)> _wanted = new(); // onglets endormis : appareil à leur réveil
+    private readonly Dictionary<string, int> _deviceGeneration = new();
     private readonly HashSet<WebView2> _following = new(); // miroirs en train de suivre leur onglet
     private Windows.UI.Color _pageColor = Windows.UI.Color.FromArgb(255, 255, 255, 255);
     // Fond et encre des barres d'état : partagés par toutes les coques, ils changent de couleur sans rien redessiner.
@@ -66,6 +67,8 @@ public sealed partial class PageHost
             _ => Device.Find(name) is { } found ? [found] : null,
         };
         if (devices is null || (name is not null && devices.Count == 0)) return;
+        var generation = _deviceGeneration[id] = _deviceGeneration.GetValueOrDefault(id) + 1;
+        bool Stale() => _deviceGeneration.GetValueOrDefault(id) != generation || Core(id) != core;
         _desktopUserAgent ??= core.Settings.UserAgent;
         ClearSims(id, view);
 
@@ -79,10 +82,15 @@ public sealed partial class PageHost
                 RuntimeChanged?.Invoke();
                 core.Settings.UserAgent = _desktopUserAgent;
                 await core.CallDevToolsProtocolMethodAsync("Emulation.setTouchEmulationEnabled", """{"enabled":false,"maxTouchPoints":1}""");
+                if (Stale()) return;
                 await core.CallDevToolsProtocolMethodAsync("Emulation.setEmitTouchEventsForMouse", """{"enabled":false}""");
+                if (Stale()) return;
                 await core.CallDevToolsProtocolMethodAsync("Emulation.clearDeviceMetricsOverride", "{}");
+                if (Stale()) return;
                 await ApplyZoomAsync(id);
+                if (Stale()) return;
                 await ApplySettingsAsync(id, core); // le flou du bas des pages revient
+                if (Stale()) return;
                 core.Reload();
                 return;
             }
@@ -119,15 +127,20 @@ public sealed partial class PageHost
             LayoutSims(id);
             RuntimeChanged?.Invoke();
             await ApplySettingsAsync(id, core); // retire le flou du bas des pages
+            if (Stale()) return;
             await PageZoom.TabAsync(core, 1);   // l'appareil a ses dimensions exactes : sa page n'est pas zoomée
+            if (Stale()) return;
             await EmulateAsync(id, sims[0]);
-            await WireDeviceSyncAsync(id,core);
+            if (Stale()) return;
+            await WireDeviceSyncAsync(id, core);
+            if (Stale()) return;
             core.Reload();
             await Task.WhenAll(sims.Skip(1).Select(async sim =>
             {
                 // Entre-temps, l'onglet a pu être fermé ou changer de mode : ses miroirs ont été fermés avec lui.
-                if (!await StartMirrorAsync(id, view, sim.View) || !_sims.TryGetValue(id, out var current) || current != sims) return;
+                if (!await StartMirrorAsync(id, view, sim.View) || Stale() || !_sims.TryGetValue(id, out var current) || current != sims) return;
                 await EmulateAsync(id, sim);
+                if (Stale()) return;
                 Follow(sim.View, core.Source);
             }));
         }
@@ -138,9 +151,18 @@ public sealed partial class PageHost
     public async void RotateDevice(string id)
     {
         if (!_sims.TryGetValue(id, out var sims)) return;
+        var generation = _deviceGeneration[id] = _deviceGeneration.GetValueOrDefault(id) + 1;
         foreach (var sim in sims.Where(s => !s.Device.Computer)) sim.Landscape = !sim.Landscape;
         LayoutSims(id);
-        await Task.WhenAll(sims.ToList().Select(sim => EmulateAsync(id, sim, metricsOnly: true)));
+        try
+        {
+            await Task.WhenAll(sims.ToList().Select(async sim =>
+            {
+                if (_deviceGeneration.GetValueOrDefault(id) != generation) return;
+                await EmulateAsync(id, sim, metricsOnly: true);
+            }));
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
     }
 
     /// <summary>Couleur de fond de la page affichée : celle de la barre d'état des appareils simulés.</summary>

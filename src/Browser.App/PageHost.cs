@@ -23,6 +23,7 @@ public sealed partial class PageHost(Grid container, ColumnDefinition primary, C
     public event Action? PagePressed;
     public bool IsPdf(string id) => _pdf.Contains(id);
     private bool _watchLayout;
+    private string? _fullScreenTab;
     private (string? Primary, string? Secondary, double Ratio) _layout;
 
     public event Action<string, string?, string?>? PageChanged; // id, url, titre

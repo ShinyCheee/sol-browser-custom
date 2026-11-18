@@ -8,6 +8,9 @@ public sealed partial class NetworkInspector
     private readonly Dictionary<string, SemaphoreSlim> _captureLocks = new();
     private readonly HashSet<string> _capturing = new();
 
+    public bool IsListeningTo(string tabId, CoreWebView2 core) =>
+        _capturing.Contains(tabId) && _captureCores.GetValueOrDefault(tabId) == core;
+
     public async Task StopCaptureAsync()
     {
         // Keep the bounded history, but release engine response buffers and stop collecting hidden diagnostics.

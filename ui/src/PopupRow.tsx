@@ -1,9 +1,17 @@
-import {useState,useRef,useEffect,type RefObject} from 'react';
-import {send,formatDomain} from './bridge';
-import {t} from './i18n';
-import {Icon} from './Icons';
-import type {Content,Item,Profile,Setting,Wallpaper} from './PopupTypes';
-export default function Row({ item, selected = false, onPick }: { item: Item; selected?: boolean; onPick: () => void }) {
+import { formatDomain } from './bridge';
+import { t } from './i18n';
+import { Icon } from './Icons';
+import type { Item } from './PopupTypes';
+
+export default function Row({
+  item,
+  selected = false,
+  onPick,
+}: {
+  item: Item;
+  selected?: boolean;
+  onPick: () => void;
+}) {
   const domain = formatDomain(item.url);
   const iconD =
     item.kind === 'search'
@@ -16,11 +24,13 @@ export default function Row({ item, selected = false, onPick }: { item: Item; se
 
   return (
     <button
+      type="button"
       className={`row${selected ? ' selected' : ''}`}
       role="option"
       title={item.title ? `${item.title}\n${item.url}` : item.url}
       aria-selected={selected}
-      onMouseDown={e => e.button === 0 && onPick()}
+      onMouseDown={e => e.preventDefault()}
+      onClick={onPick}
     >
       <span className="row-badge" aria-hidden>
         <Icon d={iconD} size={13} />
@@ -28,17 +38,27 @@ export default function Row({ item, selected = false, onPick }: { item: Item; se
       {item.kind === 'search' ? (
         <>
           <span className="row-title">{item.title}</span>
-          <span className="row-pill"><span>{t('Recherche', 'Search')}</span></span>
+          <span className="row-pill">
+            <span>{t('Recherche', 'Search')}</span>
+          </span>
         </>
       ) : item.kind === 'go' ? (
         <>
-          <span className="row-title">{t('Ouvrir', 'Open')} {item.title}</span>
-          <span className="row-pill"><span>{t('Aller', 'Go')}</span></span>
+          <span className="row-title">
+            {t('Ouvrir', 'Open')} {item.title}
+          </span>
+          <span className="row-pill">
+            <span>{t('Aller', 'Go')}</span>
+          </span>
         </>
       ) : (
         <>
           <span className="row-title">{item.title || domain || item.url}</span>
-          {domain && <span className="row-pill"><span>{domain}</span></span>}
+          {domain && (
+            <span className="row-pill">
+              <span>{domain}</span>
+            </span>
+          )}
         </>
       )}
     </button>

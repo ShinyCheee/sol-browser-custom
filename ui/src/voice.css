@@ -1,26 +1,165 @@
-.sol-chat-voice-only { padding: 0; gap: 0; position: relative; }
-.sol-voice { display: grid; place-items: center; flex: 1; width: 100%; min-height: 0; background: transparent; }
-.sol-voice-target { --voice-accent: #768188; position: relative; display: grid; place-items: center; width: clamp(96px, 45vw, 176px); max-width: 70%; aspect-ratio: 1; padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: pointer; color: var(--voice-accent); }
-.sol-voice-target:focus-visible { outline: 2px solid currentColor; outline-offset: 12px; }
-.sol-voice-orb { width: 100%; }
-.voice-phase-ring { position: absolute; inset: -9px; border: 2px solid color-mix(in srgb, currentColor 28%, transparent); border-radius: 50%; pointer-events: none; }
-.voice-phase-ring[data-processing="true"] { border-top-color: currentColor; border-right-color: currentColor; animation: voice-working 1.4s linear infinite; }
-[data-voice-stage="listening"] .sol-voice-target { --voice-accent: #299eb5; }
-[data-voice-stage="listening"] .voice-phase-ring { animation: voice-listening 2s ease-in-out infinite; }
-[data-voice-stage="transcribing"] .sol-voice-target, [data-voice-stage="checking"] .sol-voice-target, [data-voice-stage="installing"] .sol-voice-target { --voice-accent: #bd8035; }
-[data-voice-stage="thinking"] .sol-voice-target { --voice-accent: #8b6dcc; }
-[data-voice-stage="acting"] .sol-voice-target { --voice-accent: #4c83c4; }
-[data-voice-stage="speaking"] .sol-voice-target { --voice-accent: #4eaa8c; }
-[data-voice-stage="error"] .sol-voice-target { --voice-accent: #cc625d; }
-.sol-voice-inline { width: 38px; height: 38px; margin: 3px 8px; }
-.sol-voice-inline .sol-voice-target { width: 30px; max-width: none; }
-@keyframes voice-working { to { transform: rotate(360deg); } }
-@keyframes voice-listening { 50% { opacity: .45; transform: scale(1.04); } }
-@media (prefers-reduced-motion: reduce) { .voice-phase-ring { animation: none !important; } .voice-phase-ring[data-processing="true"] { border-style: dashed; } }
-.voice-orb-fallback { aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 30% 25%, #d9c8a4, #6e8b76 65%, #344d42); }
-.voice-settings { display: flex; flex-direction: column; gap: 10px; padding: 12px 0; }
-.voice-settings .row-hint { margin: 0; }
-.voice-options { display: flex; flex-direction: column; gap: 8px; width: 100%; min-width: 0; }
-.voice-options .sol-select, .voice-options .sol-select-trigger { width: 100%; min-width: 0; max-width: 100%; }
-.voice-progress { width: 100%; height: 6px; accent-color: var(--text); }
-.voice-settings .pill-action { align-self: flex-start; }
+.sol-chat-voice-only {
+  padding: 0;
+  gap: 0;
+  position: relative;
+}
+
+.sol-voice-head {
+  padding: 10px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+  opacity: 0.88;
+}
+
+.sol-voice {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  background: transparent;
+}
+
+.sol-voice-target {
+  --voice-accent: #768188;
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: clamp(96px, 45vw, 176px);
+  max-width: 70%;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  color: var(--voice-accent);
+}
+
+.sol-voice-target:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 12px;
+}
+
+.sol-voice-orb {
+  width: 100%;
+}
+
+.voice-phase-ring {
+  position: absolute;
+  inset: -9px;
+  border: 2px solid color-mix(in srgb, currentColor 28%, transparent);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.voice-phase-ring[data-processing="true"] {
+  border-top-color: currentColor;
+  border-right-color: currentColor;
+  animation: voice-working 1.4s linear infinite;
+}
+
+[data-voice-stage="listening"] .sol-voice-target {
+  --voice-accent: #299eb5;
+}
+
+[data-voice-stage="listening"] .voice-phase-ring {
+  animation: voice-listening 2s ease-in-out infinite;
+}
+
+[data-voice-stage="transcribing"] .sol-voice-target,
+[data-voice-stage="checking"] .sol-voice-target,
+[data-voice-stage="installing"] .sol-voice-target {
+  --voice-accent: #bd8035;
+}
+
+[data-voice-stage="thinking"] .sol-voice-target {
+  --voice-accent: #8b6dcc;
+}
+
+[data-voice-stage="acting"] .sol-voice-target {
+  --voice-accent: #4c83c4;
+}
+
+[data-voice-stage="speaking"] .sol-voice-target {
+  --voice-accent: #4eaa8c;
+}
+
+[data-voice-stage="error"] .sol-voice-target {
+  --voice-accent: #cc625d;
+}
+
+.sol-voice-inline {
+  width: 38px;
+  height: 38px;
+  margin: 3px 8px;
+}
+
+.sol-voice-inline .sol-voice-target {
+  width: 30px;
+  max-width: none;
+}
+
+@keyframes voice-working {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes voice-listening {
+  50% {
+    opacity: 0.45;
+    transform: scale(1.04);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-phase-ring {
+    animation: none !important;
+  }
+
+  .voice-phase-ring[data-processing="true"] {
+    border-style: dashed;
+  }
+}
+
+.voice-orb-fallback {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 25%, #d9c8a4, #6e8b76 65%, #344d42);
+}
+
+.voice-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 0;
+}
+
+.voice-settings .row-hint {
+  margin: 0;
+}
+
+.voice-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.voice-options .sol-select,
+.voice-options .sol-select-trigger {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.voice-progress {
+  width: 100%;
+  height: 6px;
+  accent-color: var(--text);
+}
+
+.voice-settings .pill-action {
+  align-self: flex-start;
+}

@@ -38,8 +38,16 @@ public class VideoDirectTests
             while (job.State == "InProgress") await Task.Delay(10, ct);
             Assert.Equal("Completed", job.State);
             Assert.Equal(body, await File.ReadAllBytesAsync(job.ResultFilePath, ct));
+            if (OperatingSystem.IsWindows())
+                Assert.Contains("ZoneId=3", await File.ReadAllTextAsync(job.ResultFilePath + ":Zone.Identifier", ct));
             Assert.False(Directory.Exists(Path.Combine(root, "absent-engines")));
             await serve;
+
+            // Une URL ou un référent invalide ne laisse jamais le téléchargement bloqué en « InProgress ».
+            var bad = new VideoDownload("not-a-valid-url", ":::bad-referer:::", "Bad", root, Path.Combine(root, "absent-engines"), [], 720, direct: true);
+            bad.Start();
+            while (bad.State == "InProgress") await Task.Delay(10, ct);
+            Assert.Equal("Interrupted", bad.State);
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }

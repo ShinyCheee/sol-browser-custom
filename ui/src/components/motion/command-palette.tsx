@@ -14,6 +14,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { t, useLang } from "@/i18n";
 import { EASE_OUT } from "@/lib/ease";
 import { useOnOpen } from "@/lib/hooks/use-on-open";
 import { useRowCursor } from "@/lib/hooks/use-row-cursor";
@@ -56,14 +57,20 @@ export const PANEL_SPRING = {
 } as const;
 
 export function CommandPalette({
-  embedded=false,listHeight=320,title="Commands",
+  embedded = false,
+  listHeight = 320,
+  title,
   items,
   shortcut = "k",
-  placeholder = "Type a command or search…",
-  emptyMessage = "No results found.",
+  placeholder,
+  emptyMessage,
   open: controlledOpen,
   onOpenChange,
 }: CommandPaletteProps) {
+  useLang();
+  const resolvedTitle = title ?? t("Commandes", "Commands");
+  const resolvedPlaceholder = placeholder ?? t("Tapez une commande ou recherchez…", "Type a command or search…");
+  const resolvedEmptyMessage = emptyMessage ?? t("Aucun résultat.", "No results found.");
   const [internalOpen, setInternalOpen] = useState(false);
   const controlled = controlledOpen !== undefined;
   const open = controlled ? controlledOpen : internalOpen;
@@ -127,7 +134,7 @@ export function CommandPalette({
   const grouped = useMemo(() => {
     const map = new Map<string, CommandItem[]>();
     filtered.forEach((it) => {
-      const g = it.group ?? "Results";
+      const g = it.group ?? t("Résultats", "Results");
       const groupItems = map.get(g) ?? [];
       groupItems.push(it);
       map.set(g, groupItems);
@@ -176,15 +183,39 @@ export function CommandPalette({
   };
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !mounted) return;
     const el = listRef.current?.querySelector<HTMLButtonElement>(
       `[data-index="${active}"]`,
     );
     el?.scrollIntoView({ block: "nearest" });
-  }, [active, open]);
+  }, [active, open, mounted, rows]);
 
   if (!mounted) return null;
 
-  return <CommandPaletteSurface {...{embedded,listHeight,title,open,reduce,canTouch,inputRef,listRef,uid,query,setQuery,rows,grouped,active,moveTo,setOpen,onKeyDown,placeholder,emptyMessage}}/>;
+  return (
+    <CommandPaletteSurface
+      {...{
+        embedded,
+        listHeight,
+        title: resolvedTitle,
+        open,
+        reduce,
+        canTouch,
+        inputRef,
+        listRef,
+        uid,
+        query,
+        setQuery,
+        rows,
+        grouped,
+        active,
+        moveTo,
+        setOpen,
+        onKeyDown,
+        placeholder: resolvedPlaceholder,
+        emptyMessage: resolvedEmptyMessage,
+      }}
+    />
+  );
 }
 import {CommandPaletteSurface} from "./command-palette-surface";

@@ -1,8 +1,7 @@
-using System.Runtime.InteropServices;
 using Browser.Core;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 
 namespace Browser.App;
 
@@ -11,7 +10,7 @@ public sealed partial class MainWindow : Window
     private static readonly IReadOnlyList<BrowserShortcut> Shortcuts = BrowserShortcuts.All;
 
     private readonly nint _hwnd;
-    private readonly SubclassProc _wndProc; // gardé en champ : le délégué ne doit pas être libéré
+    private readonly Win32Interop.SubclassProc _wndProc; // gardé en champ : le délégué ne doit pas être libéré
     private BrowserController? _controller;
     private UiBridge? _bridge;
     private SidebarHost? _sidebar;
@@ -21,76 +20,33 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         Title = AppPaths.Profile == Profiles.Default ? "Sol" : $"Sol — {Profiles.NameOf(AppPaths.BaseDir, AppPaths.Profile)}";
-        // Pas de barre de titre système : l'interface dessine la sienne. La bordure reste, pour le redimensionnement.
         if (AppWindow.Presenter is OverlappedPresenter presenter) presenter.SetBorderAndTitleBar(true, false);
         var icon = Path.Combine(AppContext.BaseDirectory, "Assets", "Sol.ico");
         if (File.Exists(icon)) AppWindow.SetIcon(icon);
         PlaceLikePreviousWindow();
 
-        // Les touches tapées dans une page partent dans le processus du moteur et n'atteignent pas la fenêtre.
-        // Les raccourcis sont donc enregistrés auprès de Windows, uniquement tant que la fenêtre est active.
         _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
         _wndProc = WndProc;
-        SetWindowSubclass(_hwnd, _wndProc, 1, 0);
-        Activated += (_, e) => SetShortcuts(e.WindowActivationState != WindowActivationState.Deactivated);
-        Activated += (_, e) => _bridge?.SetAmbientPace(e.WindowActivationState != WindowActivationState.Deactivated);
-        Closed += (_, _) => SetShortcuts(false);
+        Win32Interop.SetWindowSubclass(_hwnd, _wndProc, 1, 0);
+        Activated += (_, e) =>
+        {
+            var active = e.WindowActivationState != WindowActivationState.Deactivated;
+            SetShortcuts(active);
+            _bridge?.SetWindowState(foreground: active);
+        };
+        AppWindow.Changed += (_, e) =>
+        {
+            if (e.DidPresenterChange)
+                _bridge?.SetWindowState(minimized: (AppWindow.Presenter as OverlappedPresenter)?.State == OverlappedPresenterState.Minimized);
+        };
+        Closed += (_, _) =>
+        {
+            SetShortcuts(false);
+            _dividerTimer?.Stop();
+            _swipeIdle?.Stop();
+        };
 
         _ = StartInterfaceAsync();
-    }
-
-    // Après un changement de profil, la nouvelle fenêtre prend la place de l'ancienne (--bounds=x,y,largeur,hauteur).
-    private void PlaceLikePreviousWindow()
-    {
-        var args = Environment.GetCommandLineArgs();
-        const string prefix = "--bounds=";
-        var parts = args.FirstOrDefault(a => a.StartsWith(prefix, StringComparison.Ordinal))?[prefix.Length..].Split(',');
-        if (parts is { Length: 4 } && parts.All(p => int.TryParse(p, out _)))
-        {
-            var n = parts.Select(int.Parse).ToArray();
-            // Valeurs plausibles seulement : une fenêtre minuscule ou hors de portée serait introuvable.
-            if (n[2] is >= 400 and <= 10000 && n[3] is >= 300 and <= 10000 && Math.Abs(n[0]) < 20000 && Math.Abs(n[1]) < 20000)
-                AppWindow.MoveAndResize(new Windows.Graphics.RectInt32(n[0], n[1], n[2], n[3]));
-        }
-        // Le réglage de plein écran reste activé pour les profils existants. Sinon, Windows réserve la barre des tâches.
-        if (_settings.FullScreen && (parts is null || args.Contains("--fullscreen"))) AppWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
-        else if (parts is null && AppWindow.Presenter is OverlappedPresenter normal) normal.Maximize();
-        else if (args.Contains("--maximized") && AppWindow.Presenter is OverlappedPresenter presenter) presenter.Maximize();
-    }
-
-    public void SetBrowserFullScreen(bool on, bool maximize = false)
-    {
-        AppWindow.SetPresenter(on ? AppWindowPresenterKind.FullScreen : AppWindowPresenterKind.Overlapped);
-        if (!on && AppWindow.Presenter is OverlappedPresenter presenter)
-        {
-            presenter.SetBorderAndTitleBar(true, false);
-            if (maximize) presenter.Maximize();
-        }
-    }
-
-    // Plein écran demandé par une page (une vidéo) : la fenêtre couvre l'écran et tout le reste de l'interface
-    // s'efface. Échap, ou le bouton du lecteur, ramène l'interface telle qu'elle était.
-    // ponytail: en vue scindée, les deux pages restent côte à côte ; donner tout l'écran à une seule si le besoin se présente.
-    private (GridLength Top, GridLength Side, GridLength Panel, AppWindowPresenterKind Window, bool Maximized)? _beforeFullScreen;
-
-    private void SetFullScreen(bool on)
-    {
-        if (on == _beforeFullScreen.HasValue) return;
-        var none = new GridLength(0);
-        if (on)
-        {
-            _beforeFullScreen = (Root.RowDefinitions[0].Height, SidebarColumn.Width, PanelRow.Height, AppWindow.Presenter.Kind, (AppWindow.Presenter as OverlappedPresenter)?.State == OverlappedPresenterState.Maximized);
-            (Root.RowDefinitions[0].Height, SidebarColumn.Width, PanelRow.Height) = (none, none, none);
-            (Ui.Visibility, PopupFrame.Visibility) = (Visibility.Collapsed, Visibility.Collapsed);
-            if (AppWindow.Presenter.Kind != AppWindowPresenterKind.FullScreen) AppWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
-        }
-        else if (_beforeFullScreen is { } before)
-        {
-            _beforeFullScreen = null;
-            if (before.Window != AppWindowPresenterKind.FullScreen) SetBrowserFullScreen(false, before.Maximized); // déjà en plein écran avant la vidéo : on y reste
-            (Root.RowDefinitions[0].Height, SidebarColumn.Width, PanelRow.Height) = (before.Top, before.Side, before.Panel);
-            Ui.Visibility = Visibility.Visible;
-        }
     }
 
     private async Task InitAsync()
@@ -109,10 +65,16 @@ public sealed partial class MainWindow : Window
         pages.FullScreenChanged += SetFullScreen;
         var bridge = new UiBridge(Ui, "index.html", pages: pages);
         _bridge = bridge;
-        UiBridge.SystemColorsChanged += () => DispatcherQueue.TryEnqueue(bridge.BroadcastTheme);
+        Action onSystemColors = () => DispatcherQueue.TryEnqueue(bridge.BroadcastTheme);
+        UiBridge.SystemColorsChanged += onSystemColors;
+        Closed += (_, _) =>
+        {
+            UiBridge.SystemColorsChanged -= onSystemColors;
+            bridge.StopAmbient();
+        };
         _sidebar = new SidebarHost(SidebarColumn, bridge.Post, () => Root.ActualWidth);
         bridge.SidebarHost = _sidebar;
-        WirePresentation(bridge,pages);
+        WirePresentation(bridge, pages);
         bridge.PageColorChanged += (r, g, b) =>
         {
             Root.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, r, g, b));
@@ -140,7 +102,7 @@ public sealed partial class MainWindow : Window
         popup.PageVertical = () => (Pages.TransformToVisual(Root).TransformPoint(new Windows.Foundation.Point(0, 0)).Y, Pages.ActualHeight);
         var dockBridge = new UiBridge(Dock, "index.html#dock");
         bridge.AttachPopup(dockBridge);
-        var dock = new DockHost(DockFrame, Dock, dockBridge, () => dockBridge.InitAsync(uiFolder, c => _controller!.Execute(c)));
+        var dock = _dock = new DockHost(DockFrame, Dock, dockBridge, () => dockBridge.InitAsync(uiFolder, c => _controller!.Execute(c)));
         var panelBridge = new UiBridge(Panel, "index.html#panel");
         bridge.AttachPopup(panelBridge);
         var panel = new PanelHost(PanelRow, Panel, panelBridge, () => panelBridge.InitAsync(uiFolder, c => _controller!.Execute(c)), settings);
@@ -150,11 +112,18 @@ public sealed partial class MainWindow : Window
         var welcome = new WelcomeHost(Welcome, welcomeBridge, () => welcomeBridge.InitAsync(uiFolder, c => _controller!.Execute(c)));
         var chatBridge = new UiBridge(Chat, "index.html#chat");
         bridge.AttachPopup(chatBridge);
-        var chat = new ChatHost(ContentArea, ChatColumn, Chat, ChatGrip, chatBridge, () => chatBridge.InitAsync(uiFolder, c => _controller!.Execute(c)), settings);
+        var chat = _chat = new ChatHost(ContentArea, ChatColumn, Chat, ChatGrip, chatBridge, () => chatBridge.InitAsync(uiFolder, c => _controller!.Execute(c)), settings);
         WireChatGrip(chat, settings);
         pages.SpellingViews = () => [("ui.chat", chat.IsOpen ? Chat.CoreWebView2 : null, true), ("ui.sidebar", Ui.CoreWebView2, false)];
-        _controller = new BrowserController(this, pages, bridge, popup, dock, panel, welcome, settings) { ExtensionPopup = new ExtensionPopupHost(this), CapturePanel = capture, Chat = chat };
+        _controller = new BrowserController(this, pages, bridge, popup, dock, panel, welcome, settings)
+        {
+            ExtensionPopup = new ExtensionPopupHost(this, s => { if (_controller is { IsReady: true }) _controller.Shortcut(s); }),
+            CapturePanel = capture,
+            Chat = chat,
+        };
         _controller.NativeZoomChanged += () => SetShortcuts(_shortcutsActive);
+        _controller.ShortcutsChanged += () => SetShortcuts(_shortcutsActive);
+        WireUiShortcutFallback();
         WireDivider();
         void ApplyInterfaceScale()
         {
@@ -174,15 +143,35 @@ public sealed partial class MainWindow : Window
         dock.Hide();
     }
 
+    private void WireUiShortcutFallback()
+    {
+        // Repli local sur l'interface lorsque Ctrl+D / Ctrl+M ne sont pas interceptés globalement pendant un appel WebRTC.
+        Ui.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler((_, e) =>
+        {
+            if (_controller is not { IsReady: true, ActiveTabUsesMediaDevices: true }) return;
+            var ctrl = (Win32Interop.GetAsyncKeyState(0x11) & 0x8000) != 0;
+            var shift = (Win32Interop.GetAsyncKeyState(0x10) & 0x8000) != 0;
+            var alt = (Win32Interop.GetAsyncKeyState(0x12) & 0x8000) != 0;
+            if (!ctrl || shift || alt) return;
+            var key = (uint)e.Key;
+            if (key == 0x44) { e.Handled = true; _controller.Shortcut("bookmark.toggle"); }
+            else if (key == 0x4D) { e.Handled = true; _controller.Shortcut("reader.listen"); }
+        }), true);
+    }
+
     private bool _shortcutsActive;
     private void SetShortcuts(bool active)
     {
         _shortcutsActive = active;
+        var ready = _controller is { IsReady: true };
+        var mediaCall = _controller?.ActiveTabUsesMediaDevices == true;
         for (var i = 0; i < Shortcuts.Count; i++)
         {
-            UnregisterHotKey(_hwnd, i);
-            if (active && !(_controller?.UseNativeZoom == true && Shortcuts[i].Action.StartsWith("zoom.")))
-                RegisterHotKey(_hwnd, i, Shortcuts[i].Modifiers | 0x4000 /* MOD_NOREPEAT */, Shortcuts[i].Key);
+            Win32Interop.UnregisterHotKey(_hwnd, i);
+            if (!active || !ready) continue;
+            if (_controller!.UseNativeZoom && Shortcuts[i].Action.StartsWith("zoom.", StringComparison.Ordinal)) continue;
+            if (mediaCall && Shortcuts[i].Modifiers == 2 && Shortcuts[i].Key is 0x44 or 0x4D) continue;
+            Win32Interop.RegisterHotKey(_hwnd, i, Shortcuts[i].Modifiers | 0x4000 /* MOD_NOREPEAT */, Shortcuts[i].Key);
         }
     }
 
@@ -190,25 +179,12 @@ public sealed partial class MainWindow : Window
     {
         if (msg == 0x0312 /* WM_HOTKEY */ && wParam >= 0 && wParam < Shortcuts.Count)
         {
+            if (_controller is not { IsReady: true }) return 0;
             var action = Shortcuts[(int)wParam].Action;
             if (action == "address.focus") Ui.Focus(FocusState.Programmatic);
-            _controller?.Shortcut(action);
+            _controller.Shortcut(action);
             return 0;
         }
-        return DefSubclassProc(hwnd, msg, wParam, lParam);
+        return Win32Interop.DefSubclassProc(hwnd, msg, wParam, lParam);
     }
-
-    [StructLayout(LayoutKind.Sequential)] private struct Rect { public int Left, Top, Right, Bottom; }
-    [StructLayout(LayoutKind.Sequential)] private struct Point { public int X, Y; }
-    [DllImport("user32.dll")] private static extern bool GetClientRect(nint hwnd, out Rect rect);
-    [DllImport("user32.dll")] private static extern bool GetCursorPos(out Point point);
-    [DllImport("user32.dll")] private static extern bool ScreenToClient(nint hwnd, ref Point point);
-    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
-    [DllImport("user32.dll")] private static extern int GetSystemMetrics(int index);
-
-    private delegate nint SubclassProc(nint hwnd, uint msg, nint wParam, nint lParam, nuint id, nuint data);
-    [DllImport("comctl32.dll")] private static extern bool SetWindowSubclass(nint hwnd, SubclassProc proc, nuint id, nuint data);
-    [DllImport("comctl32.dll")] private static extern nint DefSubclassProc(nint hwnd, uint msg, nint wParam, nint lParam);
-    [DllImport("user32.dll")] private static extern bool RegisterHotKey(nint hwnd, int id, uint modifiers, uint key);
-    [DllImport("user32.dll")] private static extern bool UnregisterHotKey(nint hwnd, int id);
 }

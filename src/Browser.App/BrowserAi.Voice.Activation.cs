@@ -9,7 +9,12 @@ public sealed partial class BrowserController
     private bool _voiceSetupOpen;
     private void EnsureVoice()
     {
-        if (_voice is not null) return;
+        if (_voice is not null)
+        {
+            if (SolVoiceWorker.Available && !_voice.Installing && _voice.CheckedLanguage != Language.Current)
+                _voicePreparation = _voice.CheckAssetsAsync(Language.Current);
+            return;
+        }
         var voice = _voice = new SolVoiceSession(action => _window.DispatcherQueue.TryEnqueue(() => action()))
         {
             ReadAloud = _settings.SolVoiceReadAloud,
@@ -36,6 +41,11 @@ public sealed partial class BrowserController
             _voiceTurn = true; _ = SendChatAsync(text);
         };
         if (SolVoiceWorker.Available) _voicePreparation = voice.CheckAssetsAsync(Language.Current);
+    }
+    private void OnVoiceLanguageChanged()
+    {
+        if (_voice is { Installing: false } voice && SolVoiceWorker.Available && voice.CheckedLanguage != Language.Current)
+            _voicePreparation = voice.CheckAssetsAsync(Language.Current);
     }
     private async Task ToggleVoiceAsync()
     {

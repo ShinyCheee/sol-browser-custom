@@ -8,6 +8,7 @@ import {
   useReducedMotion,
 } from "motion/react";
 import { type ReactNode, useEffect } from "react";
+import { t, useLang } from "@/i18n";
 import { EASE_OUT, SPRING_PANEL } from "@/lib/ease";
 import { PresenceGate } from "@/lib/presence-gate";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,7 @@ export function MorphingModal({
   className,
   embedded = false,
 }: MorphingModalProps) {
+  useLang();
   const open = viewId !== null;
   const reduce = useReducedMotion();
   const enterY = reduce ? 0 : placement === "bottom" ? 40 : 20;
@@ -64,7 +66,7 @@ export function MorphingModal({
           {({ gate }) => (
             <motion.button
               type="button"
-              aria-label="Close modal"
+              aria-label={t("Fermer la fenêtre", "Close modal")}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}

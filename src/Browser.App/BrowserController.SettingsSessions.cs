@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using System.Text.Json;
 using Browser.Core;
 using Microsoft.UI.Windowing;
@@ -8,11 +7,9 @@ namespace Browser.App;
 
 public sealed partial class BrowserController
 {
-
     // Mémoire occupée par le navigateur et les processus de son moteur, pour le réglage d'économie de mémoire.
     private string MemoryHint()
     {
-        // Mémoire privée : celle que chaque processus occupe en propre (la mémoire partagée serait comptée plusieurs fois).
         using var self = System.Diagnostics.Process.GetCurrentProcess();
         long bytes = self.PrivateMemorySize64;
         try
@@ -29,69 +26,6 @@ public sealed partial class BrowserController
         var asleep = _pages.AsleepCount;
         return T($"Veille adaptée à la mémoire de ce PC, déchargement après {_pages.DiscardMinutes} minutes sans activité. Utilisé : {megabytes} Mo, {asleep} onglet{(asleep > 1 ? "s" : "")} déchargé{(asleep > 1 ? "s" : "")}.",
             $"Sleep adapts to this PC’s memory; unloads after {_pages.DiscardMinutes} inactive minutes. In use: {megabytes} MB, {asleep} tab{(asleep == 1 ? "" : "s")} unloaded.");
-    }
-
-    // Accueil : ce qu'il affiche au départ (réglages en cours, navigateurs trouvés sur l'ordinateur).
-    private IReadOnlyList<ImportSource> _importSources = [];
-    private const int ImportedHistory = 5000; // pages d'historique reprises, les plus récentes
-
-    private void PostWelcome()
-    {
-        _importSources = BrowserImport.Detect(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData));
-        _bridge.BroadcastTheme();
-        _welcome.Post(JsonSerializer.Serialize(new
-        {
-            welcome = "state",
-            first = !_settings.Onboarded,
-            cloud = AppPaths.Private ? null : CloudJson(),
-            name = _settings.ProfileName,
-            theme = Math.Max(0, Array.IndexOf(Themes, _settings.Theme)),
-            font = Math.Max(0, Array.IndexOf(Fonts, _settings.Font)),
-            language = Math.Max(0, Array.IndexOf(Languages, _settings.Language)),
-            engine = Math.Max(0, Array.FindIndex(Engines, e => e.Search == _settings.SearchUrlTemplate)),
-            engines = Engines.Select(e => e.Name),
-            pip = _settings.AutoPip,
-            browsers = _importSources.Select(s => new { id = s.Id, name = s.Name, profiles = s.Profiles.Select(p => new { folder = p.Folder, name = p.Name }) }),
-        }));
-    }
-
-    // Reprend les favoris, l'historique et les mots de passe d'un profil d'un autre navigateur. La lecture des fichiers se fait hors du fil
-    // de l'interface ; seul un profil détecté par le navigateur lui-même est accepté.
-    private async Task ImportAsync(string browser, string folder)
-    {
-        if (BrowserImport.ProfileDir(_importSources, browser, folder) is not { } dir) return;
-        var temp = Path.Combine(AppPaths.DataDir, "import");
-        IReadOnlyList<Bookmark> bookmarks = [];
-        IReadOnlyList<ImportedVisit> visits = [];
-        int logins = 0, locked = 0;
-        string? error = null;
-        try
-        {
-            var data = await Task.Run(() => (BrowserImport.ReadBookmarks(dir), BrowserImport.ReadHistory(dir, ImportedHistory, temp)));
-            _db.Import(data.Item1, data.Item2);
-            (bookmarks, visits) = data;
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException)
-        {
-            error = T("Les favoris et l’historique n’ont pas pu être importés. Réessayez.", "Bookmarks and history could not be imported. Please retry.");
-        }
-        try
-        {
-            // Le moteur garde sa base ouverte : les mots de passe sont appliqués au prochain démarrage.
-            (logins, locked) = await Task.Run(() =>
-            {
-                var read = PasswordImport.Read(BrowserImport.UserData(_importSources, browser)!, dir, temp);
-                PasswordImport.Queue(AppPaths.PendingPasswords, read.Logins);
-                return (read.Logins.Count, read.Unreadable);
-            });
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException or System.Security.Cryptography.CryptographicException)
-        {
-            error = T("Import incomplet. Fermez le navigateur source et réessayez, ou importez ses mots de passe depuis un fichier CSV.", "Import incomplete. Close the source browser and retry, or import its passwords from a CSV file.");
-        }
-        _welcome.Post(JsonSerializer.Serialize(new { welcome = "imported", id = browser, folder, bookmarks = bookmarks.Count, history = visits.Count, passwords = logins, locked, error }));
-        Refresh();
     }
 
     // Les nouvelles polices s'ajoutent à la fin : le réglage enregistré garde son sens.
@@ -115,6 +49,7 @@ public sealed partial class BrowserController
         _settings.Language = Languages[index];
         JsonFileStore.Save(AppPaths.Settings, _settings);
         Language.Current = Language.Resolve(_settings.Language, System.Globalization.CultureInfo.CurrentUICulture.Name);
+        OnVoiceLanguageChanged();
         _bridge.BroadcastTheme(); // la langue voyage avec le thème : toutes les vues la reçoivent
         Refresh();
         if (_settingsOpen) _popup.Post(SettingsJson());
@@ -167,7 +102,6 @@ public sealed partial class BrowserController
 
     private bool ClosesPanel(string name)
     {
-        // Ouvert : on le ferme. Ou bien ce même clic vient de le fermer en lui faisant perdre le curseur : on ne le rouvre pas.
         var open = _panel == name && _popup.IsOpen;
         var justClosed = _panelLast == name && DateTime.UtcNow - _libraryClosedAt < TimeSpan.FromMilliseconds(350);
         if (open) HidePopup();
@@ -177,7 +111,8 @@ public sealed partial class BrowserController
     }
 
     public void DismissAiPopup() { if (_aiPopup) HidePopup(); }
-    private void HidePopup(bool cancelPermissions = true)
+
+    public void HidePopup(bool cancelPermissions = true)
     {
         _videoProbeCancel?.Cancel();
         _videoPicker = null; _videoQualities = null;
@@ -205,7 +140,6 @@ public sealed partial class BrowserController
         _voiceSetupOpen = false;
         _profilesOpen = false;
         _extensionsOpen = false;
-        // Question d'accès fermée sans réponse : refus pour cette fois, rien n'est retenu.
         if (cancelPermissions) DismissPermissions();
         var dismissed = _menuDismissed;
         (_menu, _menuDismissed) = (null, null);
@@ -213,7 +147,6 @@ public sealed partial class BrowserController
         _popup.Hide();
     }
 
-    /// <summary>Raccourci clavier : agit sur l'onglet actif.</summary>
     /// <summary>La page active s'est-elle servie d'un balayage horizontal (carrousel, zone qui défile) tout récemment ?</summary>
     public Task<bool> PageUsedSidewaysAsync(double withinMs) =>
         _tabs.ActiveId is { } id ? _pages.UsedSidewaysAsync(id, withinMs) : Task.FromResult(false);
@@ -249,7 +182,6 @@ public sealed partial class BrowserController
     private void Zoom(string? id, string action, int? percent = null)
     {
         if (id is null) return;
-        // L'adresse de la vue plutôt que celle de l'onglet, qui peut encore être l'ancienne juste après une navigation.
         if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is not { } tab || (_pages.CoreOf(id)?.Source ?? tab.Url) is Settings.DefaultHomePage or QuickNotes.PageUrl) return;
         if (_pages.IsPdf(id)) return; // le lecteur PDF possède son zoom ; il ne change pas celui des sites
         var current = _settings.PageZoom;
@@ -270,7 +202,7 @@ public sealed partial class BrowserController
     private bool IsFullScreen => _window.AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen;
     private string Resolve(string input) => AddressInput.Resolve(input, _settings.SearchUrlTemplate);
     private static bool IsWeb(string url) =>
-        url.StartsWith("https://", StringComparison.Ordinal) || url.StartsWith("http://", StringComparison.Ordinal);
+        url.StartsWith("https://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("http://", StringComparison.OrdinalIgnoreCase);
 
     private readonly TabSessions _sessions = new(Path.Combine(AppPaths.DataDir, "tab-sessions.json"));
     private string? _deletingSession;
@@ -280,13 +212,13 @@ public sealed partial class BrowserController
         popup = "sessions", id = tabId,
         current = _tabs.Tabs.FirstOrDefault(t => t.Id == tabId)?.SessionId ?? "",
         site = TabSessions.SiteOf(_tabs.Tabs.FirstOrDefault(t => t.Id == tabId)?.Url ?? ""),
-        // Seules les sessions créées pour ce site sont proposées ; celle de l'onglet reste visible pour pouvoir la quitter.
         items = _sessions.ForHost(_tabs.Tabs.FirstOrDefault(t => t.Id == tabId)?.Url ?? "")
             .Concat(_sessions.Items.Where(s => s.Id == _tabs.Tabs.FirstOrDefault(t => t.Id == tabId)?.SessionId)).DistinctBy(s => s.Id)
             .Concat(TabSessions.SiteOf(_tabs.Tabs.FirstOrDefault(t => t.Id == tabId)?.Url ?? "") is null ? [] : _sessions.Unassigned).DistinctBy(s => s.Id)
             .Select(s => new { id = s.Id, name = s.Name, count = _tabs.Tabs.Count(t => t.SessionId == s.Id), legacy = s.Site.Length == 0 }),
         deleting = _deletingSession,
     });
+
     private void OpenSessionMenu(string tabId, double x, double y)
     {
         if (!_tabs.Tabs.Any(t => t.Id == tabId && !t.Private)) return;

@@ -1,5 +1,7 @@
 using Browser.Core;
 
+[assembly: System.Runtime.Versioning.SupportedOSPlatform("windows")]
+
 namespace Browser.App;
 
 // Le vrai exécuteur BrowserAi.BrowserTools.cs est compilé avec le vrai modèle onglets/notes.
@@ -10,9 +12,10 @@ public sealed partial class BrowserController
     private readonly QuickNotes _notes = new(null);
     private readonly SplitLayout _split = new();
     private readonly FakePages _pages = new();
-    private QuickNote _noteDraft = new("", "", "", "", DateTimeOffset.UtcNow);
-    private string? _splitBlankTab, _noteError;
-    private bool _closingWindow;
+    private QuickNote _noteDraft { get; set; } = new("", "", "", "", DateTimeOffset.UtcNow);
+    private string? _splitBlankTab { get; set; }
+    private string? _noteError { get; set; }
+    private bool _closingWindow { get; set; }
     public bool Ready { get; set; } = true;
     public bool PrivateContext { get; set; }
     private bool AiReady => Ready && !PrivateContext;

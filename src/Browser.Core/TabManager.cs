@@ -155,7 +155,13 @@ public sealed partial class TabManager
         var group = new TabGroup($"g{_nextGroupId++}", clean.Length > 0 ? clean : "Groupe",
             NormalizeColor(color) ?? GroupColors[_groups.Count % GroupColors.Count], collapsed, NormalizeIcon(icon));
         _groups.Add(group);
-        _tabs[i] = _tabs[i] with { GroupId = group.Id };
+        var updated = _tabs[i] with { GroupId = group.Id };
+        if (_tabs[i].GroupId is { } oldGroup)
+        {
+            int first = _tabs.FindIndex(t => t.GroupId == oldGroup), last = _tabs.FindLastIndex(t => t.GroupId == oldGroup);
+            if (first < i && i < last) { _tabs.RemoveAt(i); _tabs.Insert(last, updated); PruneGroups(); Changed?.Invoke(); return group; }
+        }
+        _tabs[i] = updated;
         PruneGroups();
         Changed?.Invoke();
         return group;
@@ -190,11 +196,18 @@ public sealed partial class TabManager
         return true;
     }
 
-    /// <summary>L'onglet prend le groupe d'un autre sans bouger. À l'appelant de les garder voisins (vue scindée).</summary>
+    /// <summary>L'onglet prend le groupe d'un autre sans bouger quand ils sont voisins ; sinon rejoint la frontière du groupe.</summary>
     public void MatchGroup(string tabId, string otherId)
     {
         int i = IndexOf(tabId), o = IndexOf(otherId);
-        if (i < 0 || o < 0 || _tabs[i].GroupId == _tabs[o].GroupId) return;
+        if (i < 0 || o < 0 || _tabs[i].Pinned || _tabs[i].GroupId == _tabs[o].GroupId) return;
+        var middleOfOld = _tabs[i].GroupId is { } old && _tabs.FindIndex(t => t.GroupId == old) < i && i < _tabs.FindLastIndex(t => t.GroupId == old);
+        if (_tabs[o].GroupId is { } target)
+        {
+            int first = _tabs.FindIndex(t => t.GroupId == target), last = _tabs.FindLastIndex(t => t.GroupId == target);
+            if (middleOfOld || i != first - 1 && i != last + 1) { AddToGroup(tabId, target); return; }
+        }
+        else if (middleOfOld) { RemoveFromGroup(tabId); return; }
         _tabs[i] = _tabs[i] with { GroupId = _tabs[o].GroupId };
         PruneGroups();
         Changed?.Invoke();

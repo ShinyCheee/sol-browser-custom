@@ -115,9 +115,24 @@ public sealed class ChatGptOAuthTests
     [Fact]
     public void PicksFirstListedModel()
     {
-        Assert.Equal("b", ChatGptOAuth.FirstModel("""{"models":[{"slug":"a","visibility":"hide"},{"slug":"b","visibility":"list"},{"slug":"c","visibility":"list"}]}"""));
+        Assert.Equal("b", ChatGptOAuth.Models("""{"models":[{"slug":"a","visibility":"hide"},{"slug":"b","visibility":"list"},{"slug":"c","visibility":"list"}]}""")[0].Slug);
         Assert.Equal("http-429", ChatGptOAuth.ErrorCode("not json", 429));
         Assert.Equal("subscription_sharing_usage_unavailable", ChatGptOAuth.ErrorCode("""{"error":{"code":"subscription_sharing_usage_unavailable"}}""", 403));
+    }
+
+    [Fact]
+    public void VerifyIdTokenAcceptsArrayAudienceAndNormalizesMalformedClaimsToFormatException()
+    {
+        var (arrayJwt, arrayJwks) = Sign(new { iss = ChatGptOAuth.Issuer, aud = new object[] { 42, "oaiapp_1" }, sub = "user-1", nonce = "n1", exp = 1_800_000_600L, iat = 1_800_000_000L });
+        Assert.Equal(("user-1", ""), ChatGptOAuth.VerifyIdToken(arrayJwt, arrayJwks, "oaiapp_1", "n1", Now));
+
+        var (numericAudJwt, numericAudJwks) = Sign(new { iss = ChatGptOAuth.Issuer, aud = 12345, sub = "user-1", nonce = "n1", exp = 1_800_000_600L, iat = 1_800_000_000L });
+        var ex = Assert.Throws<FormatException>(() => ChatGptOAuth.VerifyIdToken(numericAudJwt, numericAudJwks, "oaiapp_1", "n1", Now));
+        Assert.Equal("invalid-id-token", ex.Message);
+
+        var (missingClaimsJwt, missingClaimsJwks) = Sign(new { iss = ChatGptOAuth.Issuer });
+        var ex2 = Assert.Throws<FormatException>(() => ChatGptOAuth.VerifyIdToken(missingClaimsJwt, missingClaimsJwks, "oaiapp_1", "n1", Now));
+        Assert.Equal("invalid-id-token", ex2.Message);
     }
 
     [Fact]

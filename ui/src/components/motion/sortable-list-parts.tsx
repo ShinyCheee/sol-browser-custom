@@ -19,6 +19,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { t } from "@/i18n";
 import { SPRING_LAYOUT } from "@/lib/ease";
 import { cn } from "@/lib/utils";
 
@@ -131,7 +132,7 @@ export function SortableListHandle({
       type="button"
       disabled={unavailable}
       data-sortable-id={item.id}
-      aria-label={props["aria-label"] ?? `Reorder ${item.label}`}
+      aria-label={props["aria-label"] ?? t(`Réorganiser ${item.label}`, `Reorder ${item.label}`)}
       aria-describedby={[context.instructions, props["aria-describedby"]]
         .filter(Boolean)
         .join(" ")}
@@ -214,7 +215,7 @@ export function SortableListUndo({
     >
       {children ?? (
         <>
-          <Undo2 size={13} aria-hidden="true" /> Undo reorder
+          <Undo2 size={13} aria-hidden="true" /> {t("Annuler le déplacement", "Undo reorder")}
         </>
       )}
     </button>

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using System.Net.Sockets;
+using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -13,6 +14,7 @@ public sealed class ChatGptException(string code) : Exception(code) { public str
 
 // Compte ChatGPT de ce profil : connexion OAuth (PKCE, retour sur 127.0.0.1), jetons protégés par Windows,
 // renouvellement partagé entre les fenêtres et réponses en flux de la Responses API.
+[SupportedOSPlatform("windows")]
 public sealed partial class ChatGptAccount
 {
     private static readonly HttpClient DefaultHttp = new() { Timeout = Timeout.InfiniteTimeSpan };
@@ -22,6 +24,7 @@ public sealed partial class ChatGptAccount
     private readonly string _file;
     private readonly string _hostFile;
     private readonly string _lock;
+    private readonly SemaphoreSlim _refreshGate = new(1, 1);
     private CancellationTokenSource? _signIn;
     private IReadOnlyList<(string Slug, string Name)>? _models;
     // Modèle choisi dans les paramètres ; vide ou absent du compte : le premier modèle proposé par OpenAI.
@@ -85,6 +88,7 @@ public sealed partial class ChatGptAccount
         }
         finally { listener.Stop(); _signIn = null; _cancelled = false; cts.Dispose(); Changed?.Invoke(); }
     }
+
     private bool _cancelled;
     public void CancelSignIn()
     {
@@ -119,12 +123,12 @@ public sealed partial class ChatGptAccount
 
     public Task StreamAsync(string instructions, string input, Action<string> delta, CancellationToken ct) =>
         StreamAsync(instructions, [("user", input)], delta, ct);
+
     public Task StreamAsync(string instructions, IEnumerable<(string Role, string Text)> messages, Action<string> delta, CancellationToken ct) =>
         RunAsync(instructions, messages.Select(m => (object)new { role = m.Role, content = m.Text }).ToList(), null, null, delta, ct);
 
     // Réponse en flux ; avec des outils, chaque appel est exécuté par Sol puis renvoyé au modèle avec tout ce qu'il a
     // produit, jusqu'à une réponse finale. store:false : rien n'est conservé chez OpenAI, d'où le renvoi complet.
-    // max_output_tokens, temperature et previous_response_id sont refusés sur ce parcours (limites de la préversion).
     public async Task RunAsync(string instructions, List<object> input, object[]? tools, Func<AgentCall, Task<string>>? execute, Action<string> delta, CancellationToken ct)
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -184,9 +188,26 @@ public sealed partial class ChatGptAccount
         return _models.Any(m => m.Slug == PreferredModel) ? PreferredModel : _models.Select(m => m.Slug).FirstOrDefault() ?? throw new ChatGptException("no-model");
     }
 
-    // Jeton d'accès valide. Le jeton de renouvellement tourne et ne sert qu'une fois : renouvellement sous verrou
-    // partagé entre les fenêtres, à partir du fichier, qu'une autre fenêtre a peut-être déjà mis à jour.
-    private Task<string> AccessTokenAsync(CancellationToken ct) => Task.Run(() => Locked(() =>
+    // Jeton d'accès valide. Sérialisé en mémoire par _refreshGate (avec double vérification d'expiration) et entre
+    // fenêtres par le mutex nommé _lock, car le jeton de renouvellement tourne et ne sert qu'une seule fois.
+    private async Task<string> AccessTokenAsync(CancellationToken ct)
+    {
+        var current = Locked(Load) ?? throw new ChatGptException("signed-out");
+        if (!ChatGptOAuth.HasPlan(current.Scopes)) { Tokens = current; Changed?.Invoke(); throw new ChatGptException("plan-not-granted"); }
+        if (current.Expires > DateTimeOffset.UtcNow.AddMinutes(2)) { Tokens = current; return current.AccessToken; }
+
+        await _refreshGate.WaitAsync(ct);
+        try
+        {
+            var rechecked = Locked(Load) ?? throw new ChatGptException("signed-out");
+            if (!ChatGptOAuth.HasPlan(rechecked.Scopes)) { Tokens = rechecked; Changed?.Invoke(); throw new ChatGptException("plan-not-granted"); }
+            if (rechecked.Expires > DateTimeOffset.UtcNow.AddMinutes(2)) { Tokens = rechecked; return rechecked.AccessToken; }
+            return await Task.Run(() => Locked(() => RefreshLocked(ct)), ct);
+        }
+        finally { _refreshGate.Release(); }
+    }
+
+    private string RefreshLocked(CancellationToken ct)
     {
         var tokens = Load() ?? throw new ChatGptException("signed-out");
         if (!ChatGptOAuth.HasPlan(tokens.Scopes)) { Tokens = tokens; Changed?.Invoke(); throw new ChatGptException("plan-not-granted"); }
@@ -223,69 +244,5 @@ public sealed partial class ChatGptAccount
         Tokens = tokens; Changed?.Invoke();
         if (!ChatGptOAuth.HasPlan(tokens.Scopes)) throw new ChatGptException("plan-not-granted");
         return tokens.AccessToken;
-    }), ct);
-
-    private async Task<(string Jwks, string Revocation)> DiscoverAsync(CancellationToken ct)
-    {
-        if (_discovery is { } known) return known;
-        using var config = JsonDocument.Parse(await _http.GetStringAsync(ChatGptOAuth.Discovery, ct));
-        string Endpoint(string name) => config.RootElement.GetProperty(name).GetString() is { } url && url.StartsWith(ChatGptOAuth.Issuer + "/", StringComparison.Ordinal)
-            ? url : throw new ChatGptException("discovery-failed");
-        if (config.RootElement.GetProperty("issuer").GetString() != ChatGptOAuth.Issuer) throw new ChatGptException("discovery-failed");
-        var jwks = await _http.GetStringAsync(Endpoint("jwks_uri"), ct);
-        return (_discovery = (jwks, Endpoint("revocation_endpoint"))).Value;
     }
-
-    private async Task<string> PostAsync(string url, Dictionary<string, string> form, CancellationToken ct)
-    {
-        using var response = await _http.PostAsync(url, new FormUrlEncodedContent(form), ct);
-        var body = await response.Content.ReadAsStringAsync(ct);
-        return response.IsSuccessStatusCode ? body : throw new ChatGptException(ChatGptOAuth.ErrorCode(body, (int)response.StatusCode));
-    }
-
-    // Une seule requête GET /auth/callback avec le bon hôte et le bon state termine la connexion ; les autres sont ignorées.
-    private static async Task<(string Code, string ClientId, string? Scope)> CallbackAsync(TcpListener listener, string redirect, string state, string? expectedClient, CancellationToken ct)
-    {
-        var host = new Uri(redirect).Authority;
-        while (true)
-        {
-            using var client = await listener.AcceptTcpClientAsync(ct);
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeout.CancelAfter(TimeSpan.FromSeconds(10));
-            try
-            {
-                var stream = client.GetStream();
-                using var reader = new StreamReader(stream, Encoding.ASCII, false, 1024, leaveOpen: true);
-                var parts = (await reader.ReadLineAsync(timeout.Token) ?? "").Split(' ');
-                string? requestHost = null;
-                while (await reader.ReadLineAsync(timeout.Token) is { Length: > 0 } header)
-                    if (header.StartsWith("Host:", StringComparison.OrdinalIgnoreCase)) requestHost = header[5..].Trim();
-                if (parts is not ["GET", var target, _] || requestHost != host || !target.StartsWith("/auth/callback?", StringComparison.Ordinal))
-                { await RespondAsync(stream, "404 Not Found", "", timeout.Token); continue; }
-                var query = System.Web.HttpUtility.ParseQueryString(target[target.IndexOf('?')..]);
-                if (query["state"] is not { } returned || !CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(returned), Encoding.UTF8.GetBytes(state)))
-                { await RespondAsync(stream, "400 Bad Request", "", timeout.Token); continue; }
-                var ok = query["error"] == null && query["code"] is { Length: > 0 };
-                var clientId = ok ? ChatGptOAuth.CallbackClient(query["client_id"], expectedClient) : "";
-                await RespondAsync(stream, "200 OK", ok
-                    ? Language.T("Autorisation reçue. Revenez à Sol pour terminer la connexion.", "Authorization received. Return to Sol to finish signing in.")
-                    : Language.T("La connexion à ChatGPT n’a pas abouti. Revenez à Sol pour réessayer.", "The ChatGPT sign-in did not complete. Return to Sol to try again."), timeout.Token);
-                if (!ok) throw new ChatGptException(query["error"] == "access_denied" ? "access-denied" : "signin-failed");
-                return (query["code"]!, clientId, query["scope"]);
-            }
-            catch (Exception e) when (e is IOException || e is OperationCanceledException && !ct.IsCancellationRequested) { }
-        }
-    }
-
-    private static async Task RespondAsync(Stream stream, string status, string message, CancellationToken ct)
-    {
-        var body = message.Length == 0 ? "" : "<!doctype html><meta charset=utf-8><title>Sol</title><body style=\"font:16px system-ui;margin:3em;text-align:center\"><p>"
-            + WebUtility.HtmlEncode(message) + "</p>";
-        var bytes = Encoding.UTF8.GetBytes(body);
-        var head = $"HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {bytes.Length}\r\nCache-Control: no-store\r\n"
-            + "Referrer-Policy: no-referrer\r\nContent-Security-Policy: default-src 'none'; style-src 'unsafe-inline'\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n";
-        await stream.WriteAsync(Encoding.ASCII.GetBytes(head), ct);
-        await stream.WriteAsync(bytes, ct);
-    }
-
 }

@@ -107,6 +107,7 @@ export default function AddressPill({ tab, focused, grow, shield }: { tab: Tab |
         {rawUrl && (
           <button
             className={`inline-btn${tab?.bookmarked ? ' on' : ''}`}
+            aria-pressed={!!tab?.bookmarked}
             aria-label={tab?.bookmarked ? t('Retirer des favoris', 'Remove bookmark') : t('Ajouter aux favoris', 'Add bookmark')}
             title={tab?.bookmarked ? t('Retirer des favoris', 'Remove bookmark') : t('Ajouter aux favoris', 'Add bookmark')}
             onClick={() => tab && send(tab.bookmarked ? { type: 'bookmark.remove', url: tab.url } : { type: 'bookmark.add', url: tab.url, title: tab.title })}

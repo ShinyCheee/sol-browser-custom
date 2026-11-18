@@ -11,92 +11,6 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
 {
     private bool _activePrivate;
     private const string Origin = "https://ui.navigateur/";
-    // Lit les couleurs de la page active : son fond, et sa couleur d'accent (celle qui fait son identité).
-    // L'accent vient, dans l'ordre : de la balise theme-color du site, puis de la couleur vive la plus présente
-    // parmi son en-tête, ses boutons et ses liens. Un site sans couleur vive n'a pas d'accent.
-    private const string ThemeProbeScript = """
-        (() => {
-          if (document.hidden) return null;
-          // Onglet vide : fond du navigateur. Une page d'erreur du navigateur (même adresse) garde ses propres couleurs.
-          if (location.href === 'about:blank' && !document.documentElement.hasAttribute('data-nav-error')) {
-            document.documentElement.style.background = '#eef0e2';
-            return { bg: 'rgb(238, 240, 226)', dark: false, accent: null };
-          }
-          const parse = s => {
-            const m = s && s.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
-            return m ? [+m[1], +m[2], +m[3], m[4] === undefined ? 1 : +m[4]] : null;
-          };
-          // Résout n'importe quelle couleur CSS (nom, hex, hsl…) en réutilisant un seul contexte 1x1 par page.
-          const ctx = window.__solColorCtx || (window.__solColorCtx = (() => {
-            const c = document.createElement('canvas'); c.width = c.height = 1;
-            return c.getContext('2d', { willReadFrequently: true });
-          })());
-          const resolve = css => {
-            if (!css || !ctx || !CSS.supports('color', css)) return null;
-            const rgb = parse(css);
-            if (rgb) return rgb;
-            // Les sites modernes renvoient oklch(), color(), lab()… même pour leurs fonds noirs.
-            // Le moteur convertit la couleur en sRGB ; la méthode de sélection du fond reste identique.
-            ctx.clearRect(0, 0, 1, 1);
-            ctx.fillStyle = css; ctx.fillRect(0, 0, 1, 1);
-            const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
-            return [r, g, b, a / 255];
-          };
-          const lum = ([r, g, b]) => (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-          const sat = ([r, g, b]) => { const max = Math.max(r, g, b), min = Math.min(r, g, b); return max === 0 ? 0 : (max - min) / max; };
-
-          if (document.readyState === 'loading') return null;
-          const els = [];
-          for (const x of [window.innerWidth * 0.5, window.innerWidth * 0.25, 24]) {
-            let el = document.elementFromPoint(x, 12);
-            while (el) { els.push(el); el = el.parentElement; }
-          }
-          els.push(document.querySelector('ytd-app'), document.querySelector('main'), document.body, document.documentElement);
-          let bg = [255, 255, 255];
-          for (const el of els) {
-            if (!el) continue;
-            const c = resolve(getComputedStyle(el).backgroundColor);
-            if (c && c[3] > 0.15) { bg = c.slice(0, 3); break; }
-          }
-
-          // Couleur d'accent : chaque couleur vive rencontrée reçoit un poids, la plus lourde l'emporte.
-          const votes = new Map();
-          const vote = (c, weight) => {
-            if (!c || c[3] < 0.5 || sat(c) < 0.35 || lum(c) < 0.12 || lum(c) > 0.92) return;
-            const key = c.slice(0, 3).map(v => Math.round(v / 24) * 24).join(',');
-            const entry = votes.get(key) || { c: c.slice(0, 3), w: 0 };
-            entry.w += weight * (0.5 + sat(c));
-            votes.set(key, entry);
-          };
-          const meta = document.querySelector('meta[name="theme-color"]');
-          if (meta) vote(resolve(meta.content), 12);
-          if (sat(bg) >= 0.35) vote([...bg, 1], 10); // une page déjà colorée est sa propre couleur
-          const sample = (selector, weight, limit) => {
-            let n = 0;
-            for (const el of document.querySelectorAll(selector)) {
-              if (n >= limit) break;
-              const box = el.getBoundingClientRect();
-              if (box.width < 8 || box.height < 8 || box.bottom < 0 || box.top > innerHeight) continue;
-              n++;
-              const style = getComputedStyle(el);
-              vote(resolve(style.backgroundColor), weight * Math.min(3, (box.width * box.height) / 4000 + 0.5));
-              vote(resolve(style.color), weight * 0.4);
-              if (el instanceof SVGElement) vote(resolve(style.fill), weight * 0.6);
-            }
-          };
-          sample('header, nav, [role="banner"]', 3, 6);
-          sample('button, [role="button"], input[type="submit"], a[class*="btn"], a[class*="button"]', 2, 24);
-          sample('header svg, nav svg, [class*="logo"] svg, [class*="logo"]', 2, 8);
-          sample('a[href]', 1, 30);
-          let best = null;
-          for (const entry of votes.values()) if (!best || entry.w > best.w) best = entry;
-
-          const rgb = c => `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
-          // sx, sy, vw, vh : où en est le défilement et ce que mesure la zone visible, pour relire les bords de la page (UiEdge.cs).
-          return { bg: rgb(bg), dark: lum(bg) < 0.42, accent: best ? rgb(best.c) : null, sx: scrollX, sy: scrollY, vw: innerWidth, vh: innerHeight };
-        })()
-        """;
-
     private static string? s_lastThemeMsg;
     private static (string Bg, bool Dark, string? Accent)? s_lastProbe;
 
@@ -121,7 +35,11 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
     static UiBridge() => s_system.ColorValuesChanged += (_, _) => SystemColorsChanged?.Invoke();
 
     /// <summary>Envoie les couleurs de la page active à toutes les vues d'interface, avec les réglages de teinte.</summary>
-    public void BroadcastTheme() => PublishTheme(force: true);
+    public void BroadcastTheme()
+    {
+        UpdateAmbientTimer();
+        PublishTheme(force: true);
+    }
 
     private void PublishTheme(bool force = false)
     {
@@ -149,6 +67,7 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
         foreach (var floating in _floating) floating.Post(s_lastThemeMsg);
         ThemePublished?.Invoke(s_lastThemeMsg);
     }
+
     public event Action<string>? ThemePublished;
     private string? _activeId;
     private readonly List<UiBridge> _floating = new(); // vues flottantes qui suivent la couleur de la page : menus, encart
@@ -173,36 +92,47 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
         }
     }
 
+    private static readonly SemaphoreSlim s_initGate = new(1, 1);
+
     private async Task InitViewAsync(WebView2 target, string targetPage, string uiFolder, Action<Command> onCommand)
     {
-        // Fond transparent tant que la vue n'a rien dessiné (apparition, changement de taille) : on voit le fond de
-        // la fenêtre, aux couleurs de la page, au lieu d'un rectangle noir ou blanc.
         target.Opacity = 0; // aucune surface du moteur avant la première peinture React
         target.DefaultBackgroundColor = Microsoft.UI.Colors.Transparent;
         var environment = await AdBlock.EnvironmentAsync();
-        DebugLog.Write($"startup.engine.environment {targetPage}");
-        var options = environment.CreateCoreWebView2ControllerOptions();
-        options.ProfileName = "SolInterface"; // aucune extension de page ne peut injecter du code dans l’interface privilégiée
-        await target.EnsureCoreWebView2Async(environment, options);
-        DebugLog.Write($"startup.engine.view {targetPage}");
-        var core = target.CoreWebView2;
-        core.SetVirtualHostNameToFolderMapping("ui.navigateur", uiFolder, CoreWebView2HostResourceAccessKind.Deny);
-        core.Settings.AreDefaultContextMenusEnabled = false;
-        core.Settings.IsStatusBarEnabled = false;
-        core.Settings.IsZoomControlEnabled = false;
-        NativeDownloadUi.Suppress(core);
-        core.Settings.IsPasswordAutosaveEnabled = false;
-        core.Settings.IsGeneralAutofillEnabled = false;
-        core.PermissionRequested += (_, e) => e.State = CoreWebView2PermissionState.Deny;
+        await s_initGate.WaitAsync();
+        try
+        {
+            DebugLog.Write($"startup.engine.environment {targetPage}");
+            var options = environment.CreateCoreWebView2ControllerOptions();
+            options.ProfileName = "SolInterface"; // aucune extension de page ne peut injecter du code dans l’interface privilégiée
+            await target.EnsureCoreWebView2Async(environment, options);
+            DebugLog.Write($"startup.engine.view {targetPage}");
+            var core = target.CoreWebView2;
+            core.SetVirtualHostNameToFolderMapping("ui.navigateur", uiFolder, CoreWebView2HostResourceAccessKind.Deny);
+            core.Settings.AreDefaultContextMenusEnabled = false;
+            core.Settings.IsStatusBarEnabled = false;
+            core.Settings.IsZoomControlEnabled = false;
+            NativeDownloadUi.Suppress(core);
+            core.Settings.IsPasswordAutosaveEnabled = false;
+            core.Settings.IsGeneralAutofillEnabled = false;
+            core.PermissionRequested += (_, e) => e.State = CoreWebView2PermissionState.Deny;
 
-        // L'interface ne quitte jamais ses fichiers locaux.
-        core.NavigationStarting += (_, e) => { if (!e.Uri.StartsWith(Origin, StringComparison.Ordinal)) e.Cancel = true; };
-        core.NewWindowRequested += (_, e) => e.Handled = true;
-        core.NavigationCompleted += (_, _) => { if (s_lastThemeMsg is not null) core.PostWebMessageAsJson(s_lastThemeMsg); };
+            // L'interface ne quitte jamais ses fichiers locaux.
+            core.NavigationStarting += (_, e) => { if (!e.Uri.StartsWith(Origin, StringComparison.Ordinal)) e.Cancel = true; };
+            core.NewWindowRequested += (_, e) => e.Handled = true;
+            var loaded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            core.NavigationCompleted += (_, _) =>
+            {
+                loaded.TrySetResult();
+                if (s_lastThemeMsg is not null) core.PostWebMessageAsJson(s_lastThemeMsg);
+            };
 
-        BindCommands(target, core, onCommand);
+            BindCommands(target, core, onCommand);
 
-        core.Navigate(Origin + targetPage);
+            core.Navigate(Origin + targetPage);
+            await Task.WhenAny(loaded.Task, Task.Delay(3000));
+        }
+        finally { s_initGate.Release(); }
     }
 
     public void FocusAddress()
@@ -238,60 +168,7 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
 
     /// <summary>Couleur de l'interface autour d'une page d'accueil à fond d'image : celle de l'image affichée.</summary>
     public static string WallpaperTint { get; set; } = "rgb(5, 5, 5)";
+
     /// <summary>La couleur de la page affichée a changé sans navigation (nouveau fond d'accueil) : elle est relue.</summary>
     public void RefreshPageColor() => _ = SampleOnceAsync();
-
-    private int _themeGeneration;
-    private async void ProbeActiveThemeAsync(bool withDelays)
-    {
-        var generation = ++_themeGeneration;
-        await SampleOnceAsync();
-        if (!withDelays) return;
-        await Task.Delay(350);
-        if (generation != _themeGeneration) return;
-        await SampleOnceAsync();
-        await Task.Delay(800);
-        if (generation != _themeGeneration) return;
-        await SampleOnceAsync();
-    }
-
-    private int _themeRequest;
-    private async Task SampleOnceAsync()
-    {
-        if (pages is null || _activeId is null || pages.CoreOf(_activeId) is not { } core) return;
-        var id = _activeId;
-        var source = core.Source;
-        if (source == Settings.DefaultHomePage)
-        {
-            PublishTheme();
-            if (s_lastProbe is var (startBg, _, _) && System.Text.RegularExpressions.Regex.Match(startBg, @"rgb\((\d+), (\d+), (\d+)\)") is { Success: true } sm)
-                PublishPageColor(byte.Parse(sm.Groups[1].Value), byte.Parse(sm.Groups[2].Value), byte.Parse(sm.Groups[3].Value));
-            return;
-        }
-        var request = ++_themeRequest;
-        try
-        {
-            var raw = await core.ExecuteScriptAsync(ThemeProbeScript);
-            if (request != _themeRequest || _activeId != id || core.Source != source || pages.CoreOf(id) != core) return;
-            using var doc = JsonDocument.Parse(raw);
-            if (doc.RootElement.ValueKind != JsonValueKind.Object) return;
-            var bg = doc.RootElement.GetProperty("bg").GetString() ?? "rgb(245, 246, 238)";
-            var dark = doc.RootElement.GetProperty("dark").GetBoolean();
-            // Ce que la page montre à ses bords l'emporte sur la couleur qu'elle déclare : c'est là que l'interface la touche.
-            var edge = await EdgeColorAsync(core, id, source, bg, doc.RootElement);
-            if (request != _themeRequest || _activeId != id || core.Source != source || pages.CoreOf(id) != core) return;
-            if (edge is not null && System.Text.RegularExpressions.Regex.Match(edge, @"rgb\((\d+), (\d+), (\d+)\)") is { Success: true } shown)
-            {
-                bg = edge;
-                dark = (0.299 * int.Parse(shown.Groups[1].Value) + 0.587 * int.Parse(shown.Groups[2].Value) + 0.114 * int.Parse(shown.Groups[3].Value)) / 255 < 0.42;
-            }
-            // Le fond de la fenêtre suit aussi la page : pas d'éclair sombre derrière une vue en cours de chargement.
-            if (System.Text.RegularExpressions.Regex.Match(bg, @"rgb\((\d+), (\d+), (\d+)\)") is { Success: true } m)
-                PublishPageColor(byte.Parse(m.Groups[1].Value), byte.Parse(m.Groups[2].Value), byte.Parse(m.Groups[3].Value));
-            var accent = doc.RootElement.TryGetProperty("accent", out var accentValue) && accentValue.ValueKind == JsonValueKind.String ? accentValue.GetString() : null;
-            s_lastProbe = (bg, dark, accent);
-            PublishTheme();
-        }
-        catch (Exception) { }
-    }
 }
