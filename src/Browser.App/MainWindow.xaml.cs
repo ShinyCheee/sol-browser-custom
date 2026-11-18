@@ -26,6 +26,7 @@ public sealed partial class MainWindow : Window
         PlaceLikePreviousWindow();
 
         _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        var singleWindow = TaskbarSingleWindow.Initialize(_hwnd);
         _wndProc = WndProc;
         Win32Interop.SetWindowSubclass(_hwnd, _wndProc, 1, 0);
         Activated += (_, e) =>
@@ -42,6 +43,7 @@ public sealed partial class MainWindow : Window
         Closed += (_, _) =>
         {
             SetShortcuts(false);
+            singleWindow.Dispose();
             _dividerTimer?.Stop();
             _swipeIdle?.Stop();
         };

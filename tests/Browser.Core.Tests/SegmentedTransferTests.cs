@@ -245,6 +245,8 @@ internal sealed class RangeServer : IAsyncDisposable
                     Interlocked.Exchange<Action?>(ref _onPause, null)?.Invoke();
                     if (_pauseHold is { } hold)
                         await hold.Task.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                    response.Abort();
+                    return;
                 }
             }
             response.Close();

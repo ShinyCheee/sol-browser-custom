@@ -61,6 +61,7 @@ internal static class Win32Interop
 
     public delegate nint SubclassProc(nint hwnd, uint msg, nint wParam, nint lParam, nuint id, nuint data);
     public delegate void WinEventProc(nint hook, uint change, nint hwnd, int item, int child, uint thread, uint time);
+    public delegate bool EnumWindowsProc(nint hwnd, nint lParam);
 
     [DllImport("user32.dll", EntryPoint = "MessageBoxW", CharSet = CharSet.Unicode)]
     public static extern int MessageBox(nint window, string text, string caption, uint type);
@@ -95,6 +96,11 @@ internal static class Win32Interop
     [DllImport("user32.dll", EntryPoint = "GetWindowTextLengthW", CharSet = CharSet.Unicode)] public static extern int GetWindowTextLength(nint hwnd);
     [DllImport("user32.dll", EntryPoint = "GetClassNameW", CharSet = CharSet.Unicode)] public static extern int GetClassName(nint hwnd, StringBuilder name, int count);
     [DllImport("user32.dll")] public static extern bool IsWindowVisible(nint hwnd);
+    [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc callback, nint lParam);
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(nint hwnd, out uint processId);
+    [DllImport("user32.dll", EntryPoint = "CreateWindowExW", CharSet = CharSet.Unicode)]
+    public static extern nint CreateWindowEx(int exStyle, string className, string title, int style, int x, int y, int width, int height, nint parent, nint menu, nint instance, nint param);
+    [DllImport("user32.dll")] public static extern bool DestroyWindow(nint hwnd);
 
     [DllImport("comctl32.dll")] public static extern bool SetWindowSubclass(nint hwnd, SubclassProc proc, nuint id, nuint data);
     [DllImport("comctl32.dll")] public static extern nint DefSubclassProc(nint hwnd, uint msg, nint wParam, nint lParam);

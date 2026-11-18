@@ -84,6 +84,7 @@ public sealed class ExtensionPopupHost(Window owner, Action<string>? onShortcut 
         window.Content = view;
         Place(panel ? 380 : 320, panel ? 600 : 200);
         window.AppWindow.Show(activateWindow: false); // une vue ne démarre son moteur qu'une fois affichée
+        TaskbarSingleWindow.Shared?.HideFromTaskbar(WinRT.Interop.WindowNative.GetWindowHandle(window));
         try
         {
             var environment = await AdBlock.EnvironmentAsync();
@@ -92,6 +93,7 @@ public sealed class ExtensionPopupHost(Window owner, Action<string>? onShortcut 
             await view.EnsureCoreWebView2Async(environment, options);
             if (run != _run) return;
             var core = view.CoreWebView2;
+            TaskbarSingleWindow.Shared?.WatchProcess(core.BrowserProcessId);
             core.Settings.IsStatusBarEnabled = false;
             core.Settings.AreHostObjectsAllowed = false;
             core.Settings.IsWebMessageEnabled = false;
@@ -132,6 +134,7 @@ public sealed class ExtensionPopupHost(Window owner, Action<string>? onShortcut 
         Win32Interop.SetWindowPos(hwnd, 0, 0, 0, 0, 0, 0x0037); // recalcul du cadre, sans déplacement, taille ni activation
         // Fenêtre du navigateur pour propriétaire : elle reste au-dessus de lui, sans entrée dans la barre des tâches.
         if (nint.Size == 8) Win32Interop.SetWindowLongPtr(hwnd, -8, _owner); else Win32Interop.SetWindowLong(hwnd, -8, (int)_owner);
+        TaskbarSingleWindow.Shared?.HideFromTaskbar(hwnd);
         var rounded = 2; // coins et ombre du système (Windows 11) ; sans effet avant
         var applied = Win32Interop.DwmSetWindowAttribute(hwnd, 33, ref rounded, sizeof(int));
         if (applied != 0) DebugLog.Write($"fenêtre d'extension : coins du système refusés (0x{applied:X8})");

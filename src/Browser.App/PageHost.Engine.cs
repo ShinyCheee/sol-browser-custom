@@ -21,6 +21,7 @@ public sealed partial class PageHost
             options.ProfileName = profileName;
             await view.EnsureCoreWebView2Async(environment, options);
         }
+        TaskbarSingleWindow.Shared?.WatchProcess(view.CoreWebView2.BrowserProcessId);
         var profile = view.CoreWebView2.Profile;
         await StartupPreparation.OptionalAsync("private-cleanup", async () =>
         {

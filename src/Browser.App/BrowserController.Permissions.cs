@@ -92,16 +92,19 @@ public sealed partial class BrowserController
         finally { request.Deferral.Complete(); UpdateMediaShortcutState(); _window.DispatcherQueue.TryEnqueue(ShowNextPermission); }
     }
 
+    private bool TabUsesMediaDevices(string? id)
+    {
+        if (id is null || _tabs.Tabs.FirstOrDefault(t => t.Id == id) is not { } tab
+            || _pages.CoreOf(id) is not { } core || PermissionStore.OriginOf(core.Source) is not { } origin)
+            return false;
+        var store = tab.Private || AppPaths.Private ? _privatePermissions : PermissionFor(tab.SessionId);
+        return store.Get(origin, nameof(CoreWebView2PermissionKind.Microphone)) == true
+            || store.Get(origin, nameof(CoreWebView2PermissionKind.Camera)) == true;
+    }
+
     private void UpdateMediaShortcutState()
     {
-        var usesMedia = false;
-        if (_tabs.ActiveId is { } id && _tabs.Tabs.FirstOrDefault(t => t.Id == id) is { } tab
-            && _pages.CoreOf(id) is { } core && PermissionStore.OriginOf(core.Source) is { } origin)
-        {
-            var store = tab.Private || AppPaths.Private ? _privatePermissions : PermissionFor(tab.SessionId);
-            usesMedia = store.Get(origin, nameof(CoreWebView2PermissionKind.Microphone)) == true
-                || store.Get(origin, nameof(CoreWebView2PermissionKind.Camera)) == true;
-        }
+        var usesMedia = TabUsesMediaDevices(_tabs.ActiveId);
         if (_activeUsesMedia == usesMedia) return;
         _activeUsesMedia = usesMedia;
         ShortcutsChanged?.Invoke();

@@ -16,14 +16,10 @@ public sealed partial class BrowserController
             case "profile.rename":
                 if (Profiles.Rename(AppPaths.BaseDir, id, c.Title!) && id == AppPaths.Profile) _window.Title = $"Sol — {ProfileName(id)}";
                 break;
-            case "window.private":
+            case "window.private" or "profile.isolated":
                 DebugLog.Write("private.before-hide");
                 HidePopup(); DebugLog.Write("private.before-open");
                 Open(Settings.DefaultHomePage, isPrivate: true); DebugLog.Write("private.opened"); return true;
-            case "profile.isolated":
-                HidePopup();
-                OpenProfile(Profiles.CreateTemporary(AppPaths.BaseDir, T("Navigation privée", "Private browsing")), replace: false, isPrivate: true);
-                return true;
             case "profile.switch": SwitchProfile(id); return true;
             case "profile.delete": DeleteProfile(id); return true;
             case "capture.menu": OpenCaptureMenu(); return true;

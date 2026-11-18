@@ -143,7 +143,7 @@ public sealed partial class BrowserController
         {
             var left = _lastActive;
             _lastActive = _tabs.ActiveId;
-            if (_settings.AutoPip && left is not null && !(showSplit && _split.Contains(left)) && _tabs.Tabs.Any(t => t.Id == left))
+            if (_settings.AutoPip && left is not null && !TabUsesMediaDevices(left) && !(showSplit && _split.Contains(left)) && _tabs.Tabs.Any(t => t.Id == left))
                 _ = _pages.TryEnterPipAsync(left);
         }
         _pages.SetPreviewTab(_tabs.ActiveId);

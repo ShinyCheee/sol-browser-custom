@@ -136,23 +136,24 @@ public sealed partial class BrowserController
     private void Close(string id)
     {
         _designTabs.Remove(id);
-        if (_asking is not null && _tabs.ActiveId == id) HidePopup();
-        var recent = _tabs.ActiveId == id
-            ? _recentTabs.LastOrDefault(other => other != id && !_pages.IsAsleep(other) && _tabs.Tabs.Any(t => t.Id == other))
-            : null;
+        var wasActive = _tabs.ActiveId == id;
+        if (_asking is not null && wasActive) HidePopup();
+        var splitPartner = _split.Contains(id) ? (_split.PrimaryId == id ? _split.SecondaryId : _split.PrimaryId) : null;
+        var next = wasActive
+            ? TabCloseSelection.NextActive(_tabs.Tabs, _tabs.Groups, _recentTabs, id, _tabs.ActiveId, _pages.IsAsleep, _shortcutTabs.ContainsValue, splitPartner)
+            : _tabs.ActiveId;
+
         // Fermer un onglet épinglé, ou rangé dans un groupe, ferme sa page, pas son emplacement : il reste à sa place,
         // déchargé, et se recharge quand on y revient. Pour le retirer pour de bon : le fermer une seconde fois quand il
         // est dans un groupe (il est alors déjà déchargé), ou « Détacher l'onglet » puis fermer quand il est épinglé.
         if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is { Private: false } kept && !_shortcutTabs.ContainsValue(id)
             && (kept.Pinned || (kept.GroupId is not null && !_pages.IsAsleep(id))))
         {
-            if (_tabs.ActiveId == id)
+            _recentTabs.Remove(id);
+            if (wasActive)
             {
-                var others = _tabs.Tabs.Where(t => !t.Pinned && t.Id != id).ToList();
-                var next = recent ?? others.FirstOrDefault(t => !_pages.IsAsleep(t.Id))?.Id
-                    ?? others.FirstOrDefault()?.Id ?? _tabs.Tabs.FirstOrDefault(t => t.Id != id)?.Id;
                 if (next is not null) Activate(next);
-                else Open(_settings.HomePage, isPrivate: false);
+                else Open(_settings.HomePage, isPrivate: AppPaths.Private);
             }
             // Fermer la vue d'origine interromprait son téléchargement : elle reste masquée jusqu'à sa fin.
             if (_downloads.Any(d => d.TabId == id && DownloadPending(d.Id, d.Op))) return;
@@ -164,7 +165,6 @@ public sealed partial class BrowserController
             _bridge.ForgetTab(id);
             return;
         }
-        var wasActive = _tabs.ActiveId == id;
         if (!_tabs.Close(id)) return;
         _recentTabs.Remove(id);
         _restored.Remove(id);
@@ -180,9 +180,12 @@ public sealed partial class BrowserController
         _split.OnTabClosed(id);
         _network.Forget(id);
         foreach (var shortcut in _shortcutTabs.Where(p => p.Value == id).Select(p => p.Key).ToList()) _shortcutTabs.Remove(shortcut);
-        if (wasActive && _tabs.Tabs.Count > 0) Activate(recent ?? _tabs.ActiveId!);
-        // Dernier onglet fermé : la fenêtre reste ouverte sur un onglet vide. Elle ne se ferme que par son bouton.
-        if (_tabs.Tabs.Count == 0) Open(_settings.HomePage, isPrivate: AppPaths.Private);
+        if (wasActive)
+        {
+            if (next is not null) Activate(next);
+            else Open(_settings.HomePage, isPrivate: AppPaths.Private);
+        }
+        else if (_tabs.Tabs.Count == 0) Open(_settings.HomePage, isPrivate: AppPaths.Private);
     }
 
     // Onglet vide ouvert seulement pour remplir la moitié droite d'une vue scindée.
@@ -191,12 +194,17 @@ public sealed partial class BrowserController
     private void CloseSplit()
     {
         var blank = _splitBlankTab;
+        var primary = _split.PrimaryId;
         _splitBlankTab = null;
         _split.Close();
         // Resté vide : il n'a servi à rien, il repart avec la vue scindée.
         if (blank is not null && _tabs.Tabs.Count > 1 && _tabs.Tabs.FirstOrDefault(t => t.Id == blank) is { } tab
             && (tab.Url is "about:blank" or "" || tab.Url == Settings.DefaultHomePage))
+        {
+            if (_tabs.ActiveId == blank && primary is not null && primary != blank && _tabs.Tabs.Any(t => t.Id == primary))
+                Activate(primary);
             Close(blank);
+        }
     }
 
     // Scinde l'onglet actif avec l'onglet donné, ou avec un nouvel onglet si aucun n'est donné.

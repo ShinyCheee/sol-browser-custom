@@ -108,6 +108,7 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
             await target.EnsureCoreWebView2Async(environment, options);
             DebugLog.Write($"startup.engine.view {targetPage}");
             var core = target.CoreWebView2;
+            TaskbarSingleWindow.Shared?.WatchProcess(core.BrowserProcessId);
             core.SetVirtualHostNameToFolderMapping("ui.navigateur", uiFolder, CoreWebView2HostResourceAccessKind.Deny);
             core.Settings.AreDefaultContextMenusEnabled = false;
             core.Settings.IsStatusBarEnabled = false;

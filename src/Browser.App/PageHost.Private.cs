@@ -55,23 +55,29 @@ public sealed partial class PageHost
 
     private async Task DeletePrivateProfileAsync(WebView2 view, CoreWebView2Profile profile)
     {
+        var folder = profile.ProfilePath;
         _profileReady.Remove(profile.ProfileName);
         _sessionCookies.Remove(profile.ProfileName);
         if (_privateProfileName == profile.ProfileName) _privateProfileName = null;
         try
         {
-            // Delete alone defers removal until the browser process exits.
-            await profile.ClearBrowsingDataAsync();
-            profile.Delete();
+            // Delete alone defers removal until the browser process exits; bound ClearBrowsingDataAsync so Delete always runs before shutdown.
+            await profile.ClearBrowsingDataAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(2.5));
         }
+        catch (Exception error) when (error is TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException)
+        { DebugLog.Write($"private.clear.failed {error.GetType().Name}"); }
+        try { profile.Delete(); }
         catch (Exception error) when (error is InvalidOperationException or System.Runtime.InteropServices.COMException)
         { DebugLog.Write($"private.delete.failed {error.GetType().Name}"); }
         finally { view.Close(); }
+        _ = RemoveAbandonedFolderAsync(folder);
     }
 
     public async Task ClosePrivateTabsAsync()
     {
+        var hadPrivate = _privateTabs.Count > 0;
         foreach (var id in _privateTabs.ToArray()) Remove(id);
         await Task.WhenAll(_closingProfiles.Where(p => PrivateBrowsing.IsProfile(p.Key)).Select(p => p.Value).ToArray());
+        if (hadPrivate) await Task.Delay(250);
     }
 }
