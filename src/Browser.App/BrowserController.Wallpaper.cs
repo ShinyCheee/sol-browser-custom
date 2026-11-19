@@ -62,12 +62,11 @@ public sealed partial class BrowserController
                 if (data is not null) _wallpaperLoaded = (wanted.Id, data);
             }
         }
-        var (r, g, b) = wanted is not null && data is not null ? wanted.Tint : ((byte)5, (byte)5, (byte)5);
-        var tint = $"rgb({r}, {g}, {b})";
+        var tint = wanted is not null && data is not null ? $"rgb({wanted.Tint.R}, {wanted.Tint.G}, {wanted.Tint.B})" : null;
         if (UiBridge.WallpaperTint != tint) { UiBridge.WallpaperTint = tint; _bridge.BroadcastTheme(); _bridge.RefreshPageColor(); }
         var json = JsonSerializer.Serialize(new
         {
-            @event = "start-wallpaper", url = data ?? "", tint = data is null ? null : tint,
+            @event = "start-wallpaper", url = data ?? "", tint,
             author = data is null || wanted?.Id == -1 ? null : wanted!.Author, page = data is null || wanted?.Id == -1 ? null : wanted!.Page,
         });
         foreach (var tab in _tabs.Tabs.Where(t => t.Url == Settings.DefaultHomePage && (tabId is null || t.Id == tabId) && !_pages.IsAsleep(t.Id)))

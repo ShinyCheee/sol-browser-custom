@@ -5,7 +5,7 @@ import {sidebarHost} from './sidebar-check-host.mjs';
 
 const output=resolve('bin/brand-review');
 await mkdir(output,{recursive:true});
-const host=await sidebarHost('src/Browser.App/bin/x64/Release/net10.0-windows10.0.19041.0/win-x64/Sol.exe');
+const host=await sidebarHost(process.argv[2] ?? 'src/Browser.App/bin/x64/Release/net10.0-windows10.0.19041.0/win-x64/Sol.exe');
 const settingsFile=resolve(host.profile,'settings.json');
 const saved=async()=>{try{return JSON.parse(await readFile(settingsFile,'utf8'));}catch(error){if(error.code==='ENOENT')return {};throw error;}};
 const settings=JSON.parse(await readFile(settingsFile,'utf8'));
@@ -78,10 +78,22 @@ try {
   const start=await host.connect('https://start.sol/index.html#start');
   await host.wait(()=>start.evaluate('document.querySelector(".start-brand")&&document.documentElement.dataset.wallpaper==="true"'),'new default wallpaper');
   await host.wait(()=>start.evaluate('[...document.images].every(i=>i.complete)'),'start image loaded');
-  assert(await start.evaluate('getComputedStyle(document.body).backgroundImage.includes("start-background")'));
-  await save(start,'07-accueil.png');
+  for (const [theme, index, name] of [['light', 1, 'start.png'], ['dark', 2, 'start-dark.png']]) {
+    await command({ type:'settings.set', id:'theme', index });
+    const wallpaper = theme === 'dark' ? 'start-background-dark-' : 'start-background-';
+    const expression = `(() => {
+      const value = getComputedStyle(document.body).backgroundImage;
+      const image = value.match(/https:[^"]+\\.jpg/)?.[0];
+      return document.documentElement.dataset.theme === ${JSON.stringify(theme)} &&
+        image?.split('/').at(-1).startsWith(${JSON.stringify(wallpaper)}) && image;
+    })()`;
+    const image = await host.wait(() => start.evaluate(expression), `${theme} default wallpaper`);
+    await start.evaluate(`Promise.all([Object.assign(new Image(), {src:${JSON.stringify(image)}}).decode(),
+      ...document.body.getAnimations().map(animation => animation.finished)])`);
+    await save(start, name);
+  }
   await copyFile(resolve(output,'01-configuration.png'),resolve('docs/images/setup.png'));
-  await copyFile(resolve(output,'07-accueil.png'),resolve('docs/images/start.png'));
+  for (const name of ['start.png', 'start-dark.png']) await copyFile(resolve(output,name),resolve('docs/images',name));
   await writeFile(resolve(output,'verification.json'),JSON.stringify({nativeWebView2:true,steps:5,nameSaved:true,themeSaved:true,fontSaved:true,fontKeyboard:true,fontChoices:14,playerSaved:true,completionSaved:true,reopenImport:true,narrowWidth:420,screenshotsRemoved:true,newWallpaper:true,realImportExecuted:false},null,2));
   await host.close(ui);
   console.log(`PASS branding + first-run, native preferences and completion, import reopening, 420px layout. Captures: ${output}`);

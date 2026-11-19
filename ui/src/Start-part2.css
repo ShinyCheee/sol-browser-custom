@@ -44,7 +44,7 @@
   line-height: 1.5;
   font-size: 12.5px;
 }
-:root[data-wallpaper="true"] .start-empty {
+:root[data-wallpaper-photo="true"] .start-empty {
   color: rgba(255, 255, 255, 0.85);
 }
 

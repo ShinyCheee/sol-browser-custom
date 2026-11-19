@@ -10,17 +10,33 @@
 
 /* Quand l'image d'arrière-plan est activée dans les réglages : parfaitement cadrée (cover) avec ou sans sidebar. */
 :root[data-wallpaper="true"] .start-body {
-  background-color: #050505;
+  background-color: #f2f2f4;
   background-image: url('./assets/start-background.jpg');
   background-position: center center;
   background-size: cover;
   background-repeat: no-repeat;
   background-attachment: fixed;
-  color: #ffffff;
+}
+
+:root[data-wallpaper="true"][data-theme="dark"]:not([data-wallpaper-photo="true"]) .start-body {
+  --start-wallpaper-shade: linear-gradient(90deg, rgb(0 0 0 / 58%) 40%, transparent 70%);
+  --text-dim: #e8e8eb;
+  background-color: #050505;
+  background-image: var(--start-wallpaper-shade), url('./assets/start-background-dark.jpg');
+}
+
+@media (max-width: 680px) {
+  :root[data-wallpaper="true"][data-theme="dark"]:not([data-wallpaper-photo="true"]) .start-body {
+    --start-wallpaper-shade: linear-gradient(rgb(0 0 0 / 58%), rgb(0 0 0 / 58%));
+  }
 }
 
 /* Une photo choisie remplace l'image de Sol : fond uni le temps qu'elle arrive, puis la photo (posée par Start.tsx). */
-:root[data-wallpaper="true"][data-wallpaper-photo="true"] .start-body { background-image: none; }
+:root[data-wallpaper="true"][data-wallpaper-photo="true"] .start-body {
+  background-color: #050505;
+  background-image: none;
+  color: #fff;
+}
 .start-credit {
   position: fixed;
   right: 14px;
@@ -54,11 +70,10 @@
 
 .start-brand { display:flex; align-items:center; gap:10px; margin-bottom:36px; }
 .start-brand img { width:44px; height:44px; border-radius:12px; }
-/* Le logo chromé est clair : sur le fond clair, une ombre fine garde ses pétales lisibles. */
-:root[data-theme="light"]:not([data-wallpaper="true"]) .start-brand img { filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.4)); }
+:root:is([data-theme="dark"], [data-wallpaper-photo="true"]) .start-brand img { background: #e8e8eb; }
 .start-brand > span { font-size:30px; font-weight:500; letter-spacing:-.065em; }
 .start-brand small { margin:5px 0 0 12px; padding-left:12px; border-left:1px solid var(--border-card); color:var(--text-dim); font-size:12.5px; line-height:18px; }
-:root[data-wallpaper="true"] .start-brand small { color:rgba(255, 255, 255, 0.8); border-color:rgba(255, 255, 255, 0.28); }
+:root[data-wallpaper-photo="true"] .start-brand small { color:rgba(255, 255, 255, 0.8); border-color:rgba(255, 255, 255, 0.28); }
 
 .start-section {
   margin: 0 0 38px;
@@ -71,7 +86,7 @@
   letter-spacing: -0.024em;
   color: inherit;
 }
-:root[data-wallpaper="true"] .start-content h2 {
+:root[data-wallpaper="true"]:is([data-theme="dark"], [data-wallpaper-photo="true"]) .start-content h2 {
   text-shadow: 0 1px 10px rgba(0, 0, 0, 0.28);
 }
 
@@ -85,7 +100,7 @@
 }
 .start-heading h1 { font-size: 20px; margin: 0 0 6px; }
 .start-heading p { margin: 0; color: var(--text-dim); font-size: 13px; }
-:root[data-wallpaper="true"] .start-heading p { color: rgba(255, 255, 255, 0.85); }
+:root[data-wallpaper-photo="true"] .start-heading p { color: rgba(255, 255, 255, 0.85); }
 
 .start-section-head {
   display: flex;
@@ -111,9 +126,9 @@
   .start-more:hover { background: var(--bg-glass-pill-hover); }
 }
 /* Voile sombre comme le crédit photo : le texte blanc reste lisible sur une zone claire de l'image. */
-:root[data-wallpaper="true"] .start-more { background: rgba(0, 0, 0, 0.32); color: #fff; }
+:root[data-wallpaper="true"]:is([data-theme="dark"], [data-wallpaper-photo="true"]) .start-more { background: rgba(0, 0, 0, 0.32); color: #fff; }
 @media (hover: hover) and (pointer: fine) {
-  :root[data-wallpaper="true"] .start-more:hover { background: rgba(0, 0, 0, 0.48); }
+  :root[data-wallpaper="true"]:is([data-theme="dark"], [data-wallpaper-photo="true"]) .start-more:hover { background: rgba(0, 0, 0, 0.48); }
 }
 /* Grille Safari des Favoris : jusqu'à 9 tuiles squircle par rangée, centrées avec leur libellé dessous. */
 .start-favorites {
@@ -202,7 +217,7 @@
   overflow: hidden;
   word-break: break-word;
 }
-:root[data-wallpaper="true"] .start-site-label {
+:root[data-wallpaper="true"]:is([data-theme="dark"], [data-wallpaper-photo="true"]) .start-site-label {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6), 0 0 8px rgba(0, 0, 0, 0.45); /* lisible sur une zone blanche de l'image */
 }
 

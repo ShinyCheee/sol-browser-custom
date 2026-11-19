@@ -13,6 +13,8 @@ Les propriétés et les descriptions française et anglaise sont enregistrées :
 
 ## Construction
 
+Le logo et les variantes d’icônes du paquet sont générés depuis [l’export Windows de l’identité Sol](../brand/README.md).
+
 Depuis PowerShell : `./tools/package-store.ps1`. Le script compile l’interface puis chaque architecture et utilise MakeAppx du SDK Windows installé, avec validation activée. Les sorties uniques et leurs journaux/empreintes sont placés dans `bin/store-<horodatage>/`. Pour x64 seulement : `./tools/package-store.ps1 -Arch x64`.
 
 Le script charge les outils du disque du dépôt et trouve également le SDK officiel restauré dans `NUGET_PACKAGES/microsoft.windows.sdk.buildtools`. `-SdkDirectory` permet d'indiquer explicitement le dossier versionné contenant `x64/makeappx.exe` et `x64/makepri.exe` lorsque le SDK n'est pas installé à son emplacement Windows habituel.

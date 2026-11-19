@@ -31,10 +31,9 @@ if (-not $SkipUiBuild) {
     finally { Pop-Location }
 }
 Add-Type -AssemblyName System.Drawing
-$icon = [Drawing.Icon]::new((Join-Path $root 'src\Browser.App\Assets\Sol.ico'), 256, 256)
-$bitmap = $icon.ToBitmap()
+$bitmap = [Drawing.Bitmap]::new((Join-Path $root 'brand\logo-windows.png'))
 if ($bitmap.GetPixel(0, 0).A -ne 0) {
-    $bitmap.Dispose(); $icon.Dispose()
+    $bitmap.Dispose()
     throw 'Le logo Windows doit conserver son fond transparent avant la distribution Store.'
 }
 try {
@@ -95,5 +94,5 @@ try {
             ConvertTo-Json | Set-Content (Join-Path $Out "verification-$a.json")
     }
 }
-finally { $bitmap.Dispose(); $icon.Dispose() }
+finally { $bitmap.Dispose() }
 Write-Host "Paquets validés par MakeAppx : $Out"

@@ -1,22 +1,38 @@
-# Conserve les originaux ; distribue uniquement le logo détouré et le fond fourni.
+param([switch]$BrowserOnly, [string]$LandingDirectory)
+
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $logo = Join-Path $root 'brand\logo-transparent.png'
 if (-not (Test-Path -LiteralPath $logo)) { throw 'Le logo transparent est requis avant de synchroniser les icônes.' }
-$wallpaper = Join-Path $root 'brand\wallpaper-original.png'
-foreach ($target in 'docs\images\logo.png', 'docs\launch-film\assets\logo.png', 'landing\public\logo.png', 'landing\src\app\icon.png', 'landing\src\app\apple-icon.png') {
-    Copy-Item -LiteralPath $logo -Destination (Join-Path $root $target) -Force
-}
-Copy-Item -LiteralPath $wallpaper -Destination (Join-Path $root 'landing\public\wallpaper.png') -Force
 Add-Type -AssemblyName System.Drawing
-# Fond de la page d'accueil : une image sans transparence, douze fois plus légère en JPEG qu'en PNG.
-$image = [Drawing.Image]::FromFile($wallpaper)
+
+function Save-ResizedImage($Source, $Path, $Width, $Height, $Codec, $Parameters) {
+    $bitmap = [Drawing.Bitmap]::new($Width, $Height)
+    $graphics = [Drawing.Graphics]::FromImage($bitmap)
+    try {
+        $graphics.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+        $graphics.DrawImage($Source, 0, 0, $Width, $Height)
+        $bitmap.Save($Path, $Codec, $Parameters)
+    } finally { $graphics.Dispose(); $bitmap.Dispose() }
+}
+
+$uiAssets = Join-Path $root 'ui\src\assets'
+$jpeg = [Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object MimeType -eq 'image/jpeg'
+$quality = [Drawing.Imaging.EncoderParameters]::new(1)
+$quality.Param[0] = [Drawing.Imaging.EncoderParameter]::new([Drawing.Imaging.Encoder]::Quality, [long]90)
 try {
-    $jpeg = [Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object MimeType -eq 'image/jpeg'
-    $quality = [Drawing.Imaging.EncoderParameters]::new(1)
-    $quality.Param[0] = [Drawing.Imaging.EncoderParameter]::new([Drawing.Imaging.Encoder]::Quality, [long]90)
-    $image.Save((Join-Path $root 'ui\src\assets\start-background.jpg'), $jpeg, $quality)
-} finally { $image.Dispose() }
+    foreach ($suffix in '', '-dark') {
+        $image = [Drawing.Image]::FromFile((Join-Path $root "brand\wallpaper${suffix}-original.png"))
+        try {
+            $image.Save((Join-Path $uiAssets "start-background${suffix}.jpg"), $jpeg, $quality)
+            Save-ResizedImage $image (Join-Path $uiAssets "start-background${suffix}-thumb.jpg") 256 144 $jpeg $quality
+        } finally { $image.Dispose() }
+    }
+    $cover = [Drawing.Image]::FromFile((Join-Path $root 'brand\logo-original.png'))
+    try {
+        Save-ResizedImage $cover (Join-Path $uiAssets 'logo-welcome.jpg') 256 256 $jpeg $quality
+    } finally { $cover.Dispose() }
+} finally { $quality.Dispose() }
 $source = [Drawing.Image]::FromFile($logo)
 $entries = @()
 try {
@@ -24,12 +40,26 @@ try {
         $bitmap = [Drawing.Bitmap]::new($size, $size)
         $graphics = [Drawing.Graphics]::FromImage($bitmap)
         $stream = [IO.MemoryStream]::new()
+        $badge = [Drawing.Drawing2D.GraphicsPath]::new()
+        $fill = [Drawing.SolidBrush]::new([Drawing.Color]::FromArgb(232, 232, 235))
         try {
+            $diameter = [int]($size * 0.46)
+            $edge = $size - $diameter - 1
+            $badge.AddArc(1, 1, $diameter, $diameter, 180, 90)
+            $badge.AddArc($edge, 1, $diameter, $diameter, 270, 90)
+            $badge.AddArc($edge, $edge, $diameter, $diameter, 0, 90)
+            $badge.AddArc(1, $edge, $diameter, $diameter, 90, 90)
+            $badge.CloseFigure()
+            $graphics.SmoothingMode = [Drawing.Drawing2D.SmoothingMode]::AntiAlias
+            $graphics.FillPath($fill, $badge)
             $graphics.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
             $graphics.DrawImage($source, 0, 0, $size, $size)
             $bitmap.Save($stream, [Drawing.Imaging.ImageFormat]::Png)
             $entries += @{ Size = $size; Bytes = $stream.ToArray() }
-        } finally { $stream.Dispose(); $graphics.Dispose(); $bitmap.Dispose() }
+            if ($size -eq 256) {
+                [IO.File]::WriteAllBytes((Join-Path $root 'brand\logo-windows.png'), $entries[-1].Bytes)
+            }
+        } finally { $fill.Dispose(); $badge.Dispose(); $stream.Dispose(); $graphics.Dispose(); $bitmap.Dispose() }
     }
     $output = [IO.MemoryStream]::new()
     $writer = [IO.BinaryWriter]::new($output)
@@ -45,9 +75,7 @@ try {
             $offset += $entry.Bytes.Length
         }
         foreach ($entry in $entries) { $writer.Write([byte[]]$entry.Bytes) }
-        foreach ($target in 'src\Browser.App\Assets\Sol.ico', 'landing\public\favicon.ico') {
-            [IO.File]::WriteAllBytes((Join-Path $root $target), $output.ToArray())
-        }
+        [IO.File]::WriteAllBytes((Join-Path $root 'src\Browser.App\Assets\Sol.ico'), $output.ToArray())
     } finally { $writer.Dispose(); $output.Dispose() }
     $splash = [Drawing.Bitmap]::new(256, 256)
     $g = [Drawing.Graphics]::FromImage($splash)
@@ -67,4 +95,25 @@ try {
         $small.Save((Join-Path $root 'ui\src\assets\logo-start.png'), [Drawing.Imaging.ImageFormat]::Png)
     } finally { $g.Dispose(); $small.Dispose() }
 } finally { $source.Dispose() }
+
+$badge = Join-Path $root 'brand\logo-windows.png'
+if (-not $BrowserOnly) {
+    foreach ($target in 'docs\images\logo.png', 'docs\launch-film\assets\logo.png') {
+        Copy-Item -LiteralPath $badge -Destination (Join-Path $root $target) -Force
+    }
+    $filmAssets = Join-Path $root 'docs\launch-film\src\assets.js'
+    $bundle = [IO.File]::ReadAllText($filmAssets)
+    $logoPattern = '"logo":"data:image/png;base64,[A-Za-z0-9+/=]+"'
+    if ([regex]::Matches($bundle, $logoPattern).Count -ne 1) { throw 'Logo introuvable dans les ressources du film.' }
+    $encoded = [Convert]::ToBase64String([IO.File]::ReadAllBytes($badge))
+    [IO.File]::WriteAllText($filmAssets, ($bundle -creplace $logoPattern, ('"logo":"data:image/png;base64,' + $encoded + '"')))
+}
+if ($LandingDirectory) {
+    $landing = (Resolve-Path -LiteralPath $LandingDirectory).Path
+    foreach ($target in 'public\logo.png', 'src\app\icon.png', 'src\app\apple-icon.png') {
+        Copy-Item -LiteralPath $badge -Destination (Join-Path $landing $target) -Force
+    }
+    Copy-Item -LiteralPath (Join-Path $root 'src\Browser.App\Assets\Sol.ico') -Destination (Join-Path $landing 'public\favicon.ico') -Force
+    Copy-Item -LiteralPath (Join-Path $uiAssets 'start-background-dark.jpg') -Destination (Join-Path $landing 'public\wallpaper-dark.jpg') -Force
+}
 Write-Host 'Identité Sol synchronisée ; originaux conservés.'

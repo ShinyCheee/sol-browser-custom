@@ -6,9 +6,11 @@
 
 *[Version française](README.fr.md)*
 
-![Sol — monochrome identity and default home wallpaper](docs/images/start.png)
+| Light new tab | Dark new tab |
+| --- | --- |
+| ![Sol's light new tab with a silver ribbon wallpaper](docs/images/start.png) | ![Sol's dark new tab with a black and silver ribbon wallpaper](docs/images/start-dark.png) |
 
-![First-run setup with beUI components](docs/images/setup.png)
+![Sol's first-run setup with the new logo](docs/images/setup.png)
 
 > A personal project, shared as is. Expect rough edges.
 
@@ -35,7 +37,7 @@
 - Light, dark, Windows or page-driven theme.
 - The interface colour follows the page, including the video that is playing or the part of the page on screen. Each zone can be turned off.
 - Interface fonts: system, Inter, Segoe UI, Geist, Manrope, DM Sans, Plus Jakarta Sans, Outfit, Figtree, Nunito or Lora.
-- New tab background: Sol's image, a personal image, an Unsplash photo of your choice, or a new one every day.
+- The new tab has a Sol wallpaper for each theme. You can also use a personal image, choose an Unsplash photo, or get a new one every day.
 
 **Fewer distractions**
 - Floating player: leave a tab where a video plays and it stays on screen in the engine's video window (Picture-in-Picture).
@@ -74,7 +76,7 @@ Only what you act on goes to OpenAI. Sign-in tokens stay encrypted on your PC, a
 
 ## Download
 
-Get the latest version from the [Releases](https://gitlab.com/stevencrdkoulo/sol-browser/-/releases) page.
+Install Sol from the [Microsoft Store](https://apps.microsoft.com/detail/9PFVX21MMSBG). Standalone installers and portable archives are available under [Releases](https://gitlab.com/stevencrdkoulo/sol-browser/-/releases).
 
 | Your Windows | Installer | Portable archive |
 |---|---|---|

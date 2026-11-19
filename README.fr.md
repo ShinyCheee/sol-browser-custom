@@ -6,9 +6,11 @@
 
 *[English version](README.md)*
 
-![Sol — nouvelle identité et fond monochrome](docs/images/start.png)
+| Nouvel onglet clair | Nouvel onglet sombre |
+| --- | --- |
+| ![Le nouvel onglet clair avec le fond argenté de Sol](docs/images/start.png) | ![Le nouvel onglet sombre avec le fond noir et argenté de Sol](docs/images/start-dark.png) |
 
-![Configuration de première ouverture avec les composants beUI](docs/images/setup.png)
+![Première configuration de Sol avec le nouveau logo](docs/images/setup.png)
 
 > Un projet personnel, partagé tel quel : tout n'est pas encore poli.
 
@@ -35,7 +37,7 @@
 - Thème clair, sombre, celui de Windows ou celui de la page.
 - La couleur de l'interface suit la page, y compris la vidéo en cours ou la partie de la page à l'écran. Chaque zone peut être désactivée.
 - Polices de l'interface : système, Inter, Segoe UI, Geist, Manrope, DM Sans, Plus Jakarta Sans, Outfit, Figtree, Nunito ou Lora.
-- Fond du nouvel onglet : l'image de Sol, une image personnelle, une photo d'Unsplash au choix, ou une nouvelle chaque jour.
+- Le fond Sol du nouvel onglet suit le thème clair ou sombre. Vous pouvez aussi utiliser une image personnelle, choisir une photo Unsplash ou en afficher une nouvelle chaque jour.
 
 **Moins de distractions**
 - Lecteur flottant : quittez un onglet où une vidéo joue, elle reste à l'écran dans la fenêtre vidéo du moteur (Picture-in-Picture).
@@ -74,7 +76,7 @@ Seul ce sur quoi vous agissez part chez OpenAI. Les jetons de connexion restent 
 
 ## Télécharger
 
-Prenez la dernière version sur la page [Releases](https://gitlab.com/stevencrdkoulo/sol-browser/-/releases).
+Installez Sol depuis le [Microsoft Store](https://apps.microsoft.com/detail/9PFVX21MMSBG). Les installateurs autonomes et les archives portables sont disponibles sur la page [Releases](https://gitlab.com/stevencrdkoulo/sol-browser/-/releases).
 
 | Votre Windows | Installateur | Archive portable |
 |---|---|---|

@@ -8,7 +8,8 @@ namespace Browser.App;
 public sealed partial class PageHost
 {
     private string? _pip;
-    private int _pipContext, _pipRequest, _pipEntering;
+    private int _pipContext, _pipGeneration, _latestPipAttempt;
+    private readonly SemaphoreSlim _pipOpening = new(1, 1);
     private DispatcherTimer? _pipTimer;
     private bool _pipProbing;
     public string? PipTab => _pip;
@@ -51,27 +52,35 @@ public sealed partial class PageHost
     public async Task<bool> TryEnterPipAsync(string id)
     {
         if (!settings.AutoPip || Core(id) is not { } core || _sims.ContainsKey(id) || _pip == id) return false;
-        var request = ++_pipRequest;
-        _pipEntering++;
+        var attempt = ++_latestPipAttempt;
+        var generation = _pipGeneration;
+        bool CanOpen() => generation == _pipGeneration && !_visible.Contains(id) && Core(id) == core && _pip != id;
+
+        // L'ouverture native prend du temps. Les navigations suivantes ne doivent pas annuler le lecteur déjà en cours d'ouverture.
+        // Une seule demande parle au moteur à la fois ; parmi celles en attente, seule la plus récente reste utile.
+        await _pipOpening.WaitAsync();
         try
         {
+            // Refresh applique la nouvelle visibilité pendant le premier appel au moteur.
+            if (attempt != _latestPipAttempt || generation != _pipGeneration) return false;
             using var tree = JsonDocument.Parse(await core.CallDevToolsProtocolMethodAsync("Page.getFrameTree", "{}"));
             var frames = new List<JsonElement> { tree.RootElement.GetProperty("frameTree") };
             for (var i = 0; i < frames.Count; i++)
                 if (frames[i].TryGetProperty("childFrames", out var children)) frames.AddRange(children.EnumerateArray());
             foreach (var frame in frames)
             {
-                if (request != _pipRequest || _visible.Contains(id) || Core(id) != core) return false;
+                if (!CanOpen()) return false;
                 using var world = JsonDocument.Parse(await core.CallDevToolsProtocolMethodAsync("Page.createIsolatedWorld",
                     JsonSerializer.Serialize(new { frameId = frame.GetProperty("frame").GetProperty("id").GetString(), worldName = "Sol PiP" })));
+                if (!CanOpen()) return false;
                 var context = world.RootElement.GetProperty("executionContextId").GetInt32();
                 if (await NativePipAsync(core, context, OpenNativePip, gesture: true) is not { ValueKind: JsonValueKind.True }) continue;
-                if (request != _pipRequest || _visible.Contains(id) || Core(id) != core)
+                if (!CanOpen())
                 {
                     await NativePipAsync(core, context, "document.pictureInPictureElement ? document.exitPictureInPicture() : null");
                     return false;
                 }
-                if (_pip is not null) ExitPip();
+                if (_pip is not null) _ = ClosePipAsync();
                 (_pip, _pipContext) = (id, context);
                 DebugLog.Write($"pip.enter {id}");
                 _pipTimer ??= CreatePipTimer();
@@ -82,13 +91,18 @@ public sealed partial class PageHost
         }
         catch (Exception e) when (e is InvalidOperationException or COMException or JsonException or ArgumentException)
         { DebugLog.Write($"pip.unavailable {id} {e.GetType().Name}"); }
-        finally { _pipEntering--; }
+        finally { _pipOpening.Release(); }
         return false;
     }
 
     public async void ExitPip()
     {
-        _pipRequest++;
+        _pipGeneration++;
+        await ClosePipAsync();
+    }
+
+    private async Task ClosePipAsync()
+    {
         if (_pip is not { } id) return;
         var core = Core(id);
         var context = _pipContext;
@@ -105,14 +119,15 @@ public sealed partial class PageHost
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
         timer.Tick += async (_, _) =>
         {
-            if (_pipProbing || _pipEntering > 0 || _pip is not { } id) return;
+            if (_pipProbing || _pipOpening.CurrentCount == 0 || _pip is not { } id) return;
             var core = Core(id);
             if (core is null) { ExitPip(); return; }
+            var generation = _pipGeneration;
             _pipProbing = true;
             JsonElement? state;
             try { state = await NativePipAsync(core, _pipContext, "!!document.pictureInPictureElement"); }
             finally { _pipProbing = false; }
-            if (_pip != id) return;
+            if (_pip != id || generation != _pipGeneration || _pipOpening.CurrentCount == 0) return;
             if (state is { ValueKind: JsonValueKind.True }) return;
             ExitPip();
             // WebView2 ne distingue pas la croix et « Retour à l'onglet » : rendre la page source dans les deux cas.

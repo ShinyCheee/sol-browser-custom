@@ -44,17 +44,22 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
     private void PublishTheme(bool force = false)
     {
         var on = Settings;
+        var systemDark = IsSystemDark();
         if (pages is not null && _activeId is not null && pages.CoreOf(_activeId) is { } ownPage && ownPage.Source is Settings.DefaultHomePage or QuickNotes.PageUrl)
         {
             var wall = ownPage.Source == Settings.DefaultHomePage && on?.StartWallpaper == true;
-            var darkStart = wall || on?.Theme == "dark" || (on?.Theme == "system" && IsSystemDark());
-            s_lastProbe = (wall ? WallpaperTint : darkStart ? "rgb(9, 9, 11)" : "rgb(238, 240, 226)", darkStart, null);
+            var darkStart = on?.Theme == "dark" || (systemDark && (on?.Theme == "system" || (wall && on?.Theme == "page")));
+            var photoTint = wall ? WallpaperTint : null;
+            var fallback = wall
+                ? darkStart ? "rgb(5, 5, 5)" : "rgb(242, 242, 244)"
+                : darkStart ? "rgb(9, 9, 11)" : "rgb(238, 240, 226)";
+            s_lastProbe = (photoTint ?? fallback, photoTint is not null || darkStart, null);
         }
         if (s_lastProbe is not var (bg, dark, accent)) return;
         accent = AmbientAccent ?? accent; // ce que la page montre à l'instant, sinon la couleur annoncée par le site
         var json = JsonSerializer.Serialize(new
         {
-            @event = "theme", bg, dark, accent, mode = on?.Theme ?? "page", systemDark = IsSystemDark(), lang = Language.Current,
+            @event = "theme", bg, dark, accent, mode = on?.Theme ?? "page", systemDark, lang = Language.Current,
             privateMode = AppPaths.Private || _activePrivate,
             font = on?.Font ?? "default",
             uiScale = on?.UiFactor ?? 0.92,
@@ -167,8 +172,8 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
         }
     }
 
-    /// <summary>Couleur de l'interface autour d'une page d'accueil à fond d'image : celle de l'image affichée.</summary>
-    public static string WallpaperTint { get; set; } = "rgb(5, 5, 5)";
+    /// <summary>Teinte de la photo choisie. Null laisse le thème déterminer la teinte du fond Sol.</summary>
+    public static string? WallpaperTint { get; set; }
 
     /// <summary>La couleur de la page affichée a changé sans navigation (nouveau fond d'accueil) : elle est relue.</summary>
     public void RefreshPageColor() => _ = SampleOnceAsync();

@@ -6,7 +6,6 @@ import { Icon } from './Icons';
 import type { Setting, Wallpaper } from './PopupTypes';
 import SettingToggle from './SettingToggle';
 import SolTabs from './SolTabs';
-import solWallpaper from './assets/start-background.jpg';
 
 export function HomeField({ home }: { home: string }) {
   const [text, setText] = useState(home);
@@ -176,11 +175,12 @@ export function WallpaperSettings({
                 whileHover={undefined}
                 role="radio"
                 aria-checked={!custom && photo === 0}
+                aria-label={t('Image de Sol', 'Sol’s image')}
                 className={`wallpaper-tile${!custom && photo === 0 ? ' active' : ''}`}
                 title={t('Image de Sol', 'Sol’s image')}
                 onClick={() => pick(0)}
               >
-                <img src={solWallpaper} alt={t('Image de Sol', 'Sol’s image')} draggable={false} />
+                <span className="wallpaper-sol-preview" aria-hidden="true" />
               </Button>
               {photos.map(p => (
                 <Button

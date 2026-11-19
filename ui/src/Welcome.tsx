@@ -3,7 +3,7 @@ import { fontLabels, onMessage, send } from './bridge';
 import { t, useLang } from './i18n';
 import { Icon } from './Icons';
 import { WelcomeIdentity } from './WelcomeIdentity';
-import logo from './assets/logo.png';
+import logoCover from './assets/logo-welcome.jpg';
 import { WelcomeCloud } from './WelcomeCloud';
 import type { CloudState } from './cloudErrors';
 import { Button } from '@/components/motion/button/base';
@@ -154,7 +154,7 @@ export default function Welcome() {
   // Première ouverture : un écran d'ouverture plein cadre, comme celui d'Arc, avant les étapes.
   if (setup.first && intro) return (
     <main className="welcome-intro">
-      <img src={logo} alt="" draggable={false} />
+      <img src={logoCover} alt="" draggable={false} />
       <h1>{t('Le web,\nà votre rythme.', 'The web,\nat your pace.')}</h1>
       <Button variant="ghost" size="sm" pressScale={0.94} className="welcome-intro-go" autoFocus aria-label={t('Commencer la configuration', 'Start setup')} onClick={() => setIntro(false)}><Icon d="M3 8h10M9 4l4 4-4 4" size={16} /></Button>
     </main>

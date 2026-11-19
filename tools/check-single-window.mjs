@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { sidebarHost } from './sidebar-check-host.mjs';
 
@@ -16,6 +18,9 @@ const psInspect = pid => {
     '  public delegate bool EnumProc(IntPtr h, IntPtr l);',
     '  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc cb, IntPtr l);',
     '  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);',
+    '  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);',
+    '  [DllImport("user32.dll")] public static extern IntPtr MonitorFromWindow(IntPtr h, uint flags);',
+    '  [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h, int attr, out int value, int size);',
     '  [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr h, int idx);',
     '  [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr h, uint cmd);',
     '  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out R r);',
@@ -39,7 +44,8 @@ const psInspect = pid => {
     '      R r; GetWindowRect(h, out r);',
     '      IntPtr lp = (IntPtr)((((r.T + r.B) / 2) << 16) | ((r.L + 2) & 0xFFFF));',
     '      int htLeft = (ex & 8) != 0 ? (int)SendMessageW(h, 0x84, IntPtr.Zero, lp) : 0;',
-    '      list.Add(new { hwnd = h.ToInt64(), pid = p, cls = cls.ToString(), title = txt.ToString(), inTaskbar, inAltTab, app = (ex & 0x40000) != 0, topMost = (ex & 8) != 0, htLeft });',
+    '      int cloaked; bool onScreen = MonitorFromWindow(h, 0) != IntPtr.Zero && DwmGetWindowAttribute(h, 14, out cloaked, 4) == 0 && cloaked == 0;',
+    '      list.Add(new { hwnd = h.ToInt64(), pid = p, cls = cls.ToString(), title = txt.ToString(), inTaskbar, inAltTab, app = (ex & 0x40000) != 0, topMost = (ex & 8) != 0, htLeft, onScreen, minimized = IsIconic(h) });',
     '      return true;',
     '    }, IntPtr.Zero);',
     '    return list.ToArray();',
@@ -109,11 +115,33 @@ try {
     v.srcObject = c.captureStream(20); document.body.append(v); await v.play();
   })()`);
 
+  // Hold the isolated-world promise after the native window appears to make the race deterministic.
+  const tree = await free1Page.call('Page.getFrameTree');
+  const { executionContextId: contextId } = await free1Page.call('Page.createIsolatedWorld', {
+    frameId: tree.frameTree.frame.id, worldName: 'Sol PiP',
+  });
+  const instrument = await free1Page.call('Runtime.evaluate', { contextId, expression: `(() => {
+    const open = HTMLVideoElement.prototype.requestPictureInPicture;
+    HTMLVideoElement.prototype.requestPictureInPicture = async function () {
+      const release = new Promise(resolve => addEventListener('sol-test-player-ready', resolve, { once: true }));
+      const window = await open.call(this);
+      await release;
+      return window;
+    };
+  })()` });
+  assert.equal(instrument.exceptionDetails, undefined, 'isolated-world player instrument installed');
   await cmd(ui, { type: 'tab.open', url: `${host.origin}/free2` });
   await host.wait(async () => (await getState(ui)).tabs.some(t => t.url === `${host.origin}/free2`), 'free2 opened');
   const free2Id = (await getState(ui)).activeId;
-  await host.wait(() => free1Page.evaluate('!!document.pictureInPictureElement'), 'video PiP active');
-  await delay(350);
+  await host.wait(() => free1Page.evaluate('!!document.pictureInPictureElement'), 'native PiP appears during opening');
+  await cmd(ui, { type: 'tab.open', url: `${host.origin}/free3` });
+  const free3Id = await host.wait(async () => (await getState(ui)).tabs.find(t => t.url === `${host.origin}/free3`)?.id, 'free3 opened');
+  await free1Page.evaluate(`dispatchEvent(new Event('sol-test-player-ready'))`);
+  assert.equal(await host.wait(async () => {
+    const log = await readFile(resolve(host.profile, 'debug.log'), 'utf8');
+    if (log.includes(`pip.enter ${newTab.id}`)) return 'open';
+    return (await free1Page.evaluate('!!document.pictureInPictureElement')) ? null : 'closed';
+  }, 'player opening settles'), 'open', 'another tab switch must not cancel the opening player');
 
   const winCheck = psInspect(host.pid);
   console.log('Visible windows in Sol tree:', JSON.stringify(winCheck));
@@ -123,12 +151,23 @@ try {
   assert.equal(pipWin.inAltTab, false, 'PiP window hidden from Alt+Tab');
   assert.equal(pipWin.app, false, 'PiP window does not have WS_EX_APPWINDOW');
   assert.equal(pipWin.htLeft, 10, 'PiP native resize border intact (HTLEFT=10)');
+  assert.equal(pipWin.onScreen, true, 'PiP is on screen and not cloaked');
   const taskbarEligible = winCheck.filter(w => w.inTaskbar);
   const altTabEligible = winCheck.filter(w => w.inAltTab);
   assert.equal(taskbarEligible.length, 1, `Expected strictly 1 taskbar window (MainWindow), saw ${JSON.stringify(taskbarEligible)}`);
   assert.equal(altTabEligible.length, 1, `Expected strictly 1 Alt+Tab window (MainWindow), saw ${JSON.stringify(altTabEligible)}`);
   console.log('PASS D1: strictly 1 taskbar/Alt+Tab window (PiP hidden from Taskbar & Alt-Tab)');
 
+  await cmd(ui, { type: 'window.minimize' });
+  await delay(350);
+  const minimized = psInspect(host.pid);
+  assert.ok(minimized.some(w => w.pid === host.pid && w.minimized), 'the main window is minimized');
+  assert.ok(minimized.some(w => w.hwnd === pipWin.hwnd && w.onScreen && w.topMost), 'PiP remains visible when Sol is minimized');
+  assert.equal(await free1Page.evaluate('!!document.pictureInPictureElement'), true, 'the video stays in native PiP');
+  console.log('PASS native player stays on screen during fast navigation and when Sol is minimized');
+
+  await cmd(ui, { type: 'tab.close', id: free3Id });
+  await host.wait(async () => (await getState(ui)).activeId === free2Id, 'closing Free3 returns to Free2');
   await cmd(ui, { type: 'tab.close', id: free2Id });
   await host.wait(async () => (await getState(ui)).activeId === newTab.id, 'closing Free2 returns to previous free awake tab Free1');
   console.log('PASS D2: closing Free2 returns to most recent free awake tab');
