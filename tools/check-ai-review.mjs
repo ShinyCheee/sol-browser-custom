@@ -60,7 +60,7 @@ try {
   await host.wait(()=>chat.evaluate('document.documentElement.dataset.theme==="dark"'),'chat follows dark theme');
   await shot(chat,'chat-dark');
   await command({type:'settings.set',id:'uiScale',index:2});
-  await host.wait(()=>chat.evaluate('document.body.style.zoom==="0.86"'),'chat follows interface scale');
+  await host.wait(()=>chat.evaluate('document.body.style.zoom==="0.736"'),'chat follows interface scale');
   await command({type:'window.private'});
   await host.wait(async()=>(await state()).privateMode&&!((await state()).chatOpen),'private tab hides normal conversation');
   assert.equal((await state()).aiAvailable,false);

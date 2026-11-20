@@ -129,8 +129,8 @@ export async function runBaseStartAndPrivate(ctx, launch) {
   assert.equal(startState.tabs.find(t => t.id === startState.activeId)?.zoom, 100);
 
   await command({ type: 'settings.set', id: 'uiScale', index: 2 });
-  await waitFor(() => ctx.ui.evaluate('document.body.style.zoom === "0.86"'), '80% interface scale');
-  assert.ok(await designSidebar.evaluate('document.body.style.zoom === "0.86"'));
+  await waitFor(() => ctx.ui.evaluate('document.body.style.zoom === "0.736"'), '80% interface scale');
+  assert.ok(await designSidebar.evaluate('document.body.style.zoom === "0.736"'));
   assert.ok(await startPage.evaluate('!document.body.style.zoom || document.body.style.zoom === "1"'), 'start remains at 100%');
   assert.equal(JSON.parse(await readFile(resolve(profile, 'settings.json'), 'utf8')).UiScale, 0.8);
   await command({ type: 'settings.set', id: 'uiScale', index: 0 });

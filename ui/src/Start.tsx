@@ -112,11 +112,12 @@ export default function Start() {
     const off = onMessage(value => {
       const sent = value as { event?: string; url?: string; tint?: string; author?: string; page?: string };
       if (sent.event === 'start-wallpaper') {
-        // La photo choisie pour le fond. Un voile sombre garde le texte lisible sur une image claire.
+        // Le voile suit le thème et garde les titres lisibles même sur une photo contrastée.
         setPhoto({ url: sent.url ?? '', author: sent.author, page: sent.page });
-        document.body.style.backgroundImage = sent.url ? `linear-gradient(rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.34)), url("${sent.url}")` : '';
+        document.body.style.backgroundImage = sent.url ? `var(--start-photo-shade), url("${sent.url}")` : '';
         document.body.style.backgroundColor = (sent.url && sent.tint) || ''; // la couleur de la photo : celle que prend l'interface autour
-        if (!sent.url) delete document.documentElement.dataset.wallpaperPhoto; // photo indisponible : l'image de Sol
+        if (sent.url) document.documentElement.dataset.wallpaperPhoto = 'true';
+        else delete document.documentElement.dataset.wallpaperPhoto;
         return;
       }
       const received = value as StartData;

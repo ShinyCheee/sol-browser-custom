@@ -119,6 +119,12 @@ export default function PopupViews({
           <span className="popup-header-title">{t('Téléchargements', 'Downloads')}</span>
           <span className="popup-badge">{content.items.length}</span>
         </div>
+        <div className="download-popup-display">
+          <Button variant="ghost" size="sm" className="pill-action" aria-pressed={content.floating}
+            onClick={() => send({ type: 'settings.set', id: 'floatingDownloads', index: content.floating ? 0 : 1 })}>
+            {content.floating ? t('Masquer le compteur flottant', 'Hide the floating counter') : t('Afficher le compteur flottant', 'Show the floating counter')}
+          </Button>
+        </div>
         <div className="popup-list">
           {content.items.length === 0 ? (
             <div className="empty-pill">{t('Aucun téléchargement récent.', 'No recent downloads.')}</div>

@@ -8,7 +8,7 @@ $root = Split-Path $PSScriptRoot
 $work = Join-Path (Split-Path $app) ('resource-build-' + (Split-Path $app -Leaf))
 New-Item -ItemType Directory -Path $work -Force | Out-Null
 Add-Type -AssemblyName System.Drawing
-$source = [Drawing.Bitmap]::new((Join-Path $root 'brand/logo-windows.png'))
+$source = [Drawing.Bitmap]::new((Join-Path $root 'ui/src/assets/logo.png'))
 $files = [Collections.Generic.List[string]]::new()
 try {
     foreach ($size in 16,20,24,30,32,36,40,48,60,64,72,80,96,256) {
@@ -27,7 +27,7 @@ try {
     }
 }
 finally { $source.Dispose() }
-foreach ($base in 'StoreLogo', 'Square44x44Logo', 'Square150x150Logo') {
+foreach ($base in 'StoreLogo', 'Square44x44Logo', 'Square150x150Logo', 'FileLogo') {
     $files.Add("StoreAssets\$base.png")
 }
 $files | Set-Content (Join-Path $work 'icons.resfiles') -Encoding utf8

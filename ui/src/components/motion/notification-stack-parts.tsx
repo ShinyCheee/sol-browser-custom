@@ -35,6 +35,7 @@ export type NotificationStackClassNames = {
   title?: string;
   description?: string;
   trailing?: string;
+  controls?: string;
   footer?: string;
   count?: string;
 };
@@ -47,6 +48,7 @@ export interface NotificationStackProps {
   onViewAll?: () => void;
   maxVisible?: number;
   collapsedLabel?: ReactNode;
+  footerAction?: ReactNode;
   expandedLabel?: ReactNode;
   emptyLabel?: string;
   ariaLabel?: string;

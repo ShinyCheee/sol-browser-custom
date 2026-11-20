@@ -44,10 +44,6 @@
   line-height: 1.5;
   font-size: 12.5px;
 }
-:root[data-wallpaper-photo="true"] .start-empty {
-  color: rgba(255, 255, 255, 0.85);
-}
-
 .start-content button:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 
 @media (max-width: 680px) {

@@ -61,7 +61,7 @@ public sealed partial class PageHost
         await ConfigureFanAsync(core);
         StartSpelling();
         if (!settings.MemorySaver) Wake(id, core);
-        else if (_hiddenSince.ContainsKey(id) && !core.IsSuspended)
+        else if (_hiddenSince.ContainsKey(id) && !core.IsSuspended && !MustKeepAwake(id, core))
         {
             core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low;
             if (_saver is null)

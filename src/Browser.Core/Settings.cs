@@ -37,7 +37,7 @@ public sealed class Settings
     private double _uiScale = 1;
     public double UiScale { get => _uiScale; set => _uiScale = value is 1 or 0.95 or 0.9 or 0.85 or 0.8 ? value : 1; }
     [JsonIgnore]
-    public double UiFactor => Math.Round(0.62 + _uiScale * 0.3, 3);
+    public double UiFactor => Math.Round(0.92 * _uiScale, 3);
     private double _pageZoom = 1;
     public double PageZoom
     {

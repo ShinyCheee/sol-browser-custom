@@ -1,7 +1,10 @@
 import { useLayoutEffect, useRef, useState } from 'react';
+import { ChevronUp } from 'lucide-react';
 import { Card } from '@/components/motion/card';
 import { NotificationStack } from '@/components/motion/notification-stack';
+import { Button } from '@/components/motion/button/base';
 import { interfaceScale, onMessage, send } from './bridge';
+import { Icon } from './Icons';
 import DockUpdate, { type Update } from './DockUpdate';
 import { DownloadCard, pendingDownload, type Download } from './Downloads';
 import { t, useLang } from './i18n';
@@ -44,7 +47,7 @@ export default function Dock() {
       } else if (list) {
         list.style.maxHeight = '';
       }
-      send({ type: 'dock.size', width: 320 * scale, height: height * scale });
+      send({ type: 'dock.size', width: (expanded || update ? 320 : 252) * scale, height: height * scale });
     };
     report();
     const observer = new ResizeObserver(report);
@@ -60,26 +63,12 @@ export default function Dock() {
 
   if (!items.length && !update) return null;
 
-  const active = items.filter(d => d.state === 'InProgress' && !d.paused && !d.canceled);
-  const pending = items.filter(pendingDownload);
-  const label = active.length
-    ? t(`${active.length} téléchargement${active.length > 1 ? 's' : ''} en cours`, `${active.length} download${active.length > 1 ? 's' : ''} in progress`)
-    : pending.length
-      ? pending.some(d => d.paused)
-        ? t('En pause', 'Paused')
-        : t('Interrompu', 'Interrupted')
-      : items.every(d => d.canceled)
-        ? t('Annulé', 'Canceled')
-        : items.some(d => d.state === 'Interrupted' && !d.canceled)
-          ? t('Interrompu', 'Interrupted')
-          : items.some(d => d.canceled)
-            ? t('Téléchargements', 'Downloads')
-            : t('Terminé', 'Done');
+  const label = downloadSummary(items);
 
   return (
-    <Card ref={root} size="compact" className={`sol-surface-card dock download-stack-dock${expanded ? ' expanded' : ''}`}>
+    <Card ref={root} size="compact" className={`sol-surface-card dock download-stack-dock${expanded ? ' expanded' : ' compact'}`}>
       {update && <DockUpdate update={update} />}
-      {expanded && (
+      {!!items.length && expanded && (
         <div className="dock-stack-heading">
           <span className="popup-header-title">{label}</span>
         </div>
@@ -88,14 +77,28 @@ export default function Dock() {
         <NotificationStack
           expanded={expanded}
           onExpandedChange={setExpanded}
-          maxVisible={3}
+          maxVisible={0}
           ariaLabel={t('Téléchargements', 'Downloads')}
-          className="sol-download-stack"
-          collapsedLabel={<span className="popup-header-title">{label}</span>}
+          className="sol-download-stack dock-downloads"
+          collapsedLabel={
+            <span className="dock-download-summary">
+              <span aria-live="polite">{label}</span>
+              <ChevronUp size={14} aria-hidden="true" />
+            </span>
+          }
           expandedLabel={t('Réduire', 'Collapse')}
+          footerAction={
+            <Button variant="ghost" size="icon" className="dock-hide-downloads"
+              aria-label={t('Masquer le compteur flottant', 'Hide the floating counter')}
+              title={t('Masquer le compteur flottant', 'Hide the floating counter')}
+              onClick={() => send({ type: 'settings.set', id: 'floatingDownloads', index: 0 })}>
+              <Icon name="close" size={14} />
+            </Button>
+          }
           classNames={{
             stack: 'sol-download-stack-list',
             card: 'sol-download-stack-card',
+            controls: 'sol-download-stack-controls',
             footer: 'sol-download-stack-footer',
             count: 'sol-download-count',
           }}
@@ -104,4 +107,19 @@ export default function Dock() {
       )}
     </Card>
   );
+}
+
+function downloadSummary(items: Download[]) {
+  const done = items.filter(d => d.state === 'Completed').length;
+  const active = items.filter(d => pendingDownload(d) && !d.paused && d.state === 'InProgress').length;
+  const paused = items.filter(d => pendingDownload(d) && d.paused).length;
+  const canceled = items.filter(d => d.canceled).length;
+  const plural = (count: number) => count === 1 ? '' : 's';
+  if (done === items.length) return t(`${done} téléchargement${plural(done)} terminé${plural(done)}`, `${done} download${plural(done)} completed`);
+  if (done > 0) return t(`${done} sur ${items.length} terminé${plural(done)}`, `${done} of ${items.length} completed`);
+  if (active > 0) return t(`${active} téléchargement${plural(active)} en cours`, `${active} download${plural(active)} in progress`);
+  if (paused > 0) return t(`${paused} téléchargement${plural(paused)} en pause`, `${paused} download${plural(paused)} paused`);
+  if (canceled === items.length) return t(`${canceled} téléchargement${plural(canceled)} annulé${plural(canceled)}`, `${canceled} download${plural(canceled)} canceled`);
+  const failed = items.length - canceled;
+  return t(`${failed} téléchargement${plural(failed)} interrompu${plural(failed)}`, `${failed} download${plural(failed)} interrupted`);
 }

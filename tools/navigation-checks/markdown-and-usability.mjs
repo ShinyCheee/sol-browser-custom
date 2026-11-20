@@ -169,7 +169,7 @@ export async function runScale(ctx) {
   const sidebar = await connect(await waitFor(async () => (await targets()).find(t => t.url.endsWith('#sidebar') || t.url === 'https://ui.navigateur/index.html'), 'sidebar'));
   const page = await pageAt('/a');
   const pageZoom = await page.evaluate('devicePixelRatio');
-  for (const [index, factor] of [[0, 0.92], [1, 0.89], [2, 0.86], [0, 0.92]]) {
+  for (const [index, factor] of [[0, 0.92], [1, 0.828], [2, 0.736], [0, 0.92]]) {
     await command({ type: 'settings.set', id: 'uiScale', index });
     await waitFor(() => ctx.ui.evaluate(`document.body.style.zoom === '${factor}'`), 'toolbar scale');
     await waitFor(() => sidebar.evaluate(`document.body.style.zoom === '${factor}'`), 'sidebar scale');

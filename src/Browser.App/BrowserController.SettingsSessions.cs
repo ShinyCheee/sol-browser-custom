@@ -78,7 +78,13 @@ public sealed partial class BrowserController
             case "scrollbars": _settings.HideScrollbars = !on; break;
             case "blur": _settings.BlurEnabled = on; break;
             case "videoDownloads": _settings.VideoDownloads = on; break;
-            case "floatingDownloads": _settings.FloatingDownloads = on; break;
+            case "floatingDownloads":
+                _settings.FloatingDownloads = on;
+                JsonFileStore.Save(AppPaths.Settings, _settings);
+                UpdateDock();
+                if (_downloadsOpen) _popup.Post(DownloadsJson(_downloads));
+                if (_settingsOpen) _popup.Post(SettingsJson());
+                return;
             case "onlineSuggestions": _settings.OnlineSuggestions = on; break;
             case "passwords": _settings.SavePasswords = on; break;
             case "startWallpaper": _settings.StartWallpaper = on; _ = PostStartWallpaperAsync(null); break;
@@ -181,9 +187,9 @@ public sealed partial class BrowserController
 
     private void Zoom(string? id, string action, int? percent = null)
     {
-        if (id is null) return;
-        if (_tabs.Tabs.FirstOrDefault(t => t.Id == id) is not { } tab || (_pages.CoreOf(id)?.Source ?? tab.Url) is Settings.DefaultHomePage or QuickNotes.PageUrl) return;
-        if (_pages.IsPdf(id)) return; // le lecteur PDF possède son zoom ; il ne change pas celui des sites
+        // Le curseur configure le profil même depuis une page qui possède son propre zoom.
+        if (action != "zoom.set" && (id is null || _tabs.Tabs.FirstOrDefault(t => t.Id == id) is not { } tab ||
+            (_pages.CoreOf(id)?.Source ?? tab.Url) is Settings.DefaultHomePage or QuickNotes.PageUrl || _pages.IsPdf(id))) return;
         var current = _settings.PageZoom;
         var zoom = action switch
         {
@@ -192,6 +198,7 @@ public sealed partial class BrowserController
             "zoom.set" => percent!.Value / 100d,
             _ => 1,
         };
+        if (zoom == current) return;
         _pages.SetZoom(zoom); // toutes les pages du profil, présentes et futures
         JsonFileStore.Save(AppPaths.Settings, _settings);
         if (_settingsOpen) _popup.Post(SettingsJson());

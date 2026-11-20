@@ -31,12 +31,13 @@ if (-not $SkipUiBuild) {
     finally { Pop-Location }
 }
 Add-Type -AssemblyName System.Drawing
-$bitmap = [Drawing.Bitmap]::new((Join-Path $root 'brand\logo-windows.png'))
-if ($bitmap.GetPixel(0, 0).A -ne 0) {
-    $bitmap.Dispose()
-    throw 'Le logo Windows doit conserver son fond transparent avant la distribution Store.'
-}
+$bitmap = [Drawing.Bitmap]::new((Join-Path $root 'ui\src\assets\logo.png'))
+$fileLogo = $null
 try {
+    if ($bitmap.GetPixel([int]($bitmap.Width / 2), 10).A -ne 0 -or $bitmap.GetPixel(0, 0).A -ne 0) {
+        throw "Le logo d’application Windows doit conserver son fond transparent."
+    }
+    $fileLogo = [Drawing.Bitmap]::new((Join-Path $root 'brand\logo-original.png'))
     foreach ($a in $Arch) {
         $app = Join-Path $Out "app-$a"
         $platform = @{ x64 = 'x64'; arm64 = 'ARM64'; x86 = 'x86' }[$a]
@@ -68,12 +69,17 @@ try {
         }
         $assets = Join-Path $app 'StoreAssets'
         New-Item -ItemType Directory $assets | Out-Null
-        foreach ($asset in @{ StoreLogo = 50; Square44x44Logo = 44; Square150x150Logo = 150 }.GetEnumerator()) {
+        foreach ($asset in @{ StoreLogo = 50; Square44x44Logo = 44; Square150x150Logo = 150; FileLogo = 44 }.GetEnumerator()) {
             $image = [Drawing.Bitmap]::new($asset.Value, $asset.Value)
             $graphics = [Drawing.Graphics]::FromImage($image)
             try {
                 $graphics.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-                $graphics.DrawImage($bitmap, 0, 0, $asset.Value, $asset.Value)
+                $source = $bitmap
+                if ($asset.Key -eq 'FileLogo') {
+                    $source = $fileLogo
+                    $graphics.Clear($fileLogo.GetPixel(0, 0))
+                }
+                $graphics.DrawImage($source, 0, 0, $asset.Value, $asset.Value)
                 $image.Save((Join-Path $assets "$($asset.Key).png"), [Drawing.Imaging.ImageFormat]::Png)
             }
             finally { $graphics.Dispose(); $image.Dispose() }
@@ -94,5 +100,8 @@ try {
             ConvertTo-Json | Set-Content (Join-Path $Out "verification-$a.json")
     }
 }
-finally { $bitmap.Dispose() }
+finally {
+    if ($fileLogo) { $fileLogo.Dispose() }
+    $bitmap.Dispose()
+}
 Write-Host "Paquets validés par MakeAppx : $Out"

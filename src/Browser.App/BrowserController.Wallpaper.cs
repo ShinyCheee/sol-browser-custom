@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Browser.Core;
+using Windows.Graphics.Imaging;
 
 namespace Browser.App;
 
@@ -16,7 +17,7 @@ public sealed partial class BrowserController
     private const int MaxWallpaper = 8_000_000;
     // Commun à tous les profils : une photo téléchargée ne l'est qu'une fois.
     private static string WallpaperFolder => Path.Combine(AppPaths.BaseDir, "wallpapers");
-    private (int Id, string Data)? _wallpaperLoaded; // photo en mémoire, prête à être envoyée aux pages d'accueil
+    private (int Id, string Data, (byte R, byte G, byte B) Color)? _wallpaperLoaded;
     private int _wallpaperRequest;
 
     private StartWallpaper? CurrentWallpaper => _settings.StartWallpaper && !_settings.StartWallpaperDaily && _settings.StartWallpaperCustom
@@ -52,18 +53,30 @@ public sealed partial class BrowserController
         var request = tabId is null ? ++_wallpaperRequest : _wallpaperRequest;
         var wanted = CurrentWallpaper;
         string? data = null;
+        (byte R, byte G, byte B)? color = null;
         if (wanted is not null)
         {
-            if (_wallpaperLoaded is var (id, loaded) && id == wanted.Id) data = loaded;
-            else
+            if (_wallpaperLoaded is not { } cached || cached.Id != wanted.Id)
             {
-                data = await LoadWallpaperAsync(wanted);
+                if (_bridge.WallpaperTint is not null)
+                {
+                    _bridge.WallpaperTint = null;
+                    _bridge.BroadcastTheme();
+                    _bridge.RefreshPageColor();
+                }
+                var bytes = await LoadWallpaperAsync(wanted);
+                if (bytes is not null)
+                {
+                    var sampled = await Task.Run(() => WallpaperColorAsync(bytes, wanted.Tint));
+                    if (!_closingWindow && request == _wallpaperRequest)
+                        _wallpaperLoaded = (wanted.Id, "data:image/jpeg;base64," + Convert.ToBase64String(bytes), sampled);
+                }
                 if (_closingWindow || request != _wallpaperRequest) return; // un autre choix a été fait entre-temps : son envoi suit
-                if (data is not null) _wallpaperLoaded = (wanted.Id, data);
             }
+            if (_wallpaperLoaded is { } loaded && loaded.Id == wanted.Id) (data, color) = (loaded.Data, loaded.Color);
         }
-        var tint = wanted is not null && data is not null ? $"rgb({wanted.Tint.R}, {wanted.Tint.G}, {wanted.Tint.B})" : null;
-        if (UiBridge.WallpaperTint != tint) { UiBridge.WallpaperTint = tint; _bridge.BroadcastTheme(); _bridge.RefreshPageColor(); }
+        if (_bridge.WallpaperTint != color) { _bridge.WallpaperTint = color; _bridge.BroadcastTheme(); _bridge.RefreshPageColor(); }
+        var tint = color is { } c ? $"rgb({c.R}, {c.G}, {c.B})" : null;
         var json = JsonSerializer.Serialize(new
         {
             @event = "start-wallpaper", url = data ?? "", tint,
@@ -73,13 +86,13 @@ public sealed partial class BrowserController
             _pages.PostStart(tab.Id, json);
     }
 
-    // La photo en « data: » : lue dans le dossier commun, téléchargée la première fois. Null : indisponible.
-    private static async Task<string?> LoadWallpaperAsync(StartWallpaper wallpaper)
+    // La photo est lue dans le dossier commun ou téléchargée à la première utilisation.
+    private static async Task<byte[]?> LoadWallpaperAsync(StartWallpaper wallpaper)
     {
         var file = Path.Combine(WallpaperFolder, wallpaper.Id + ".jpg");
         try
         {
-            if (wallpaper.Id == -1) return File.Exists(CustomWallpaperFile) ? "data:image/jpeg;base64," + Convert.ToBase64String(await File.ReadAllBytesAsync(CustomWallpaperFile)) : null;
+            if (wallpaper.Id == -1) return File.Exists(CustomWallpaperFile) ? await File.ReadAllBytesAsync(CustomWallpaperFile) : null;
             if (!File.Exists(file))
             {
                 var bytes = await WallpaperHttp.GetByteArrayAsync(wallpaper.ImageUrl);
@@ -90,12 +103,36 @@ public sealed partial class BrowserController
                 await File.WriteAllBytesAsync(partial, bytes);
                 File.Move(partial, file, overwrite: true);
             }
-            return "data:image/jpeg;base64," + Convert.ToBase64String(await File.ReadAllBytesAsync(file));
+            return await File.ReadAllBytesAsync(file);
         }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException or IOException or UnauthorizedAccessException)
         {
             DebugLog.Write($"fond d'accueil {wallpaper.Id} indisponible : {e.Message}");
             return null;
+        }
+    }
+
+    private static async Task<(byte R, byte G, byte B)> WallpaperColorAsync(byte[] bytes, (byte R, byte G, byte B) fallback)
+    {
+        try
+        {
+            using var source = new MemoryStream(bytes, writable: false).AsRandomAccessStream();
+            var decoder = await BitmapDecoder.CreateAsync(source);
+            const uint size = 24;
+            var transform = new BitmapTransform { ScaledWidth = size, ScaledHeight = size, InterpolationMode = BitmapInterpolationMode.Fant };
+            var pixels = (await decoder.GetPixelDataAsync(BitmapPixelFormat.Rgba8, BitmapAlphaMode.Ignore, transform,
+                ExifOrientationMode.IgnoreExifOrientation, ColorManagementMode.ColorManageToSRgb)).DetachPixelData();
+            int r = 0, g = 0, b = 0;
+            for (var index = 0; index < pixels.Length; index += 4)
+            {
+                r += pixels[index]; g += pixels[index + 1]; b += pixels[index + 2];
+            }
+            var count = pixels.Length / 4;
+            return count == 0 ? fallback : ((byte)(r / count), (byte)(g / count), (byte)(b / count));
+        }
+        catch (Exception e) when (e is IOException or ArgumentException or System.Runtime.InteropServices.COMException)
+        {
+            return fallback;
         }
     }
 }

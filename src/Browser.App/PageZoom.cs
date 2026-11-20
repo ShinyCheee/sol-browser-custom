@@ -76,23 +76,33 @@ public static class PageZoom
             else if (url.startsWith(START) || url.startsWith('chrome-extension://')) zoom = 1;
             else if (isDocument(url)) { if (!navigated) return; zoom = 1; }
             else zoom = fallback;
+            const zoomSettings = await chrome.tabs.getZoomSettings(tab.id);
+            if (zoomSettings.scope !== 'per-tab') await chrome.tabs.setZoomSettings(tab.id, { mode: 'automatic', scope: 'per-tab' });
             if (Math.abs(await chrome.tabs.getZoom(tab.id) - zoom) > 0.001) await chrome.tabs.setZoom(tab.id, zoom);
           } catch {}
         }
-        chrome.runtime.onInstalled.addListener(async () => { await settings(); for (const tab of await chrome.tabs.query({})) await apply(tab, true); });
-        chrome.tabs.onCreated.addListener(tab => apply(tab, true));
-        chrome.tabs.onUpdated.addListener((id, change, tab) => { if (change.url || change.status === 'loading') apply(tab, true); });
-        chrome.tabs.onRemoved.addListener(id => chrome.storage.session.remove('t' + id));
+        // Do not let a delayed navigation or refresh overwrite a more recent slider value.
+        let queue = Promise.resolve();
+        const enqueue = job => { queue = queue.then(job).catch(() => {}); };
+        const refresh = async navigated => {
+          await settings();
+          await Promise.all((await chrome.tabs.query({})).map(tab => apply(tab, navigated)));
+        };
+        const navigate = tab => enqueue(async () => { await settings(); await apply(tab, true); });
+        chrome.runtime.onInstalled.addListener(() => enqueue(() => refresh(true)));
+        chrome.tabs.onCreated.addListener(navigate);
+        chrome.tabs.onUpdated.addListener((id, change, tab) => { if (change.url || change.status === 'loading') navigate(tab); });
+        chrome.tabs.onRemoved.addListener(id => enqueue(() => chrome.storage.session.remove('t' + id)));
         chrome.runtime.onMessage.addListener((message, sender) => {
           if (!sender.tab) return;
-          (async () => {
+          enqueue(async () => {
             if (!await verify(message?.secret)) return;
-            if (message.zoom === 'refresh') { await settings(); for (const tab of await chrome.tabs.query({})) await apply(tab, false); return; }
+            if (message.zoom === 'refresh') { await refresh(false); return; }
             const key = 't' + sender.tab.id;
             if (typeof message.zoom === 'number' && message.zoom >= 0.25 && message.zoom <= 5) await chrome.storage.session.set({ [key]: message.zoom });
             else await chrome.storage.session.remove(key);
             await apply(sender.tab, false);
-          })();
+          });
         });
         """;
 

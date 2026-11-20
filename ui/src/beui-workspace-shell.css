@@ -100,7 +100,7 @@
 
 .sol-download-stack-footer {
   width: 100%;
-  padding: 6px 4px !important;
+  padding: 6px 4px;
   border-radius: 12px;
 }
 
@@ -127,7 +127,8 @@
 }
 
 .dock-stack-heading {
-  padding: 10px 12px 0;
+  padding-block-start: 10px;
+  padding-inline: 19px;
   color: var(--text);
 }
 

@@ -168,6 +168,8 @@ export type HostEvent = {
   width?: number;
   bg?: string;
   dark?: boolean;
+  startDark?: boolean;
+  startAccent?: string | null;
   accent?: string | null;
   mode?: 'page' | 'light' | 'dark' | 'system';
   font?: string; // police de l'interface : default, system, inter, sf

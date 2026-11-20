@@ -7,3 +7,43 @@
 .download-card .download-bar.paused .download-bar-fill{animation-play-state:paused;opacity:.55}
 .download-stack-dock .dock-update{min-width:0;max-width:100%;overflow-wrap:anywhere}.dock-update-actions{flex-wrap:wrap}
 .sol-download-stack:focus-visible,.sol-download-stack-footer:focus-visible{outline:none!important;box-shadow:inset 0 0 0 1px var(--border-strong)!important}
+.dock-downloads { min-width: 0; container-type: inline-size; }
+.sol-download-stack-controls {
+  position: relative;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+}
+.expanded .sol-download-stack-controls { margin-block-start: 8px; }
+.dock-downloads .sol-download-stack-footer {
+  min-width: 0;
+  min-height: 36px;
+  padding: 5px 10px;
+  color: var(--text);
+  text-align: start;
+}
+.dock-download-summary {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.dock-download-summary > span { min-width: 0; }
+.dock-download-summary svg { flex-shrink: 0; color: var(--text-dim); }
+.dock-downloads .dock-hide-downloads { color: var(--text-dim); padding: 0; }
+.dock-downloads .dock-hide-downloads:hover { color: var(--text); background: var(--bg-tab-hover); }
+@container (max-width: 210px) {
+  .compact .dock-downloads .sol-download-stack-footer { padding-inline: 8px 4px; }
+  .dock-download-summary { gap: 4px; }
+  .compact .dock-downloads .dock-hide-downloads { width: 28px; }
+}
+.dock-downloads .sol-download-count { background: var(--bg-pill-solid-hover) !important; color: var(--text) !important; }
+.download-popup-display { padding: 0 12px 8px; }

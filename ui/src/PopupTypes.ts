@@ -65,7 +65,7 @@ export type Content =
     }
   | { popup: 'menu'; items: string[] }
   | { popup: 'split-layout'; ratio: number }
-  | { popup: 'downloads'; items: Download[] }
+  | { popup: 'downloads'; items: Download[]; floating: boolean }
   | {
       popup: 'settings';
       section?: string;

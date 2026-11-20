@@ -83,7 +83,7 @@ export async function runNotes(ctx) {
 
   for (const index of [0, 1, 2]) {
     await command({ type: 'settings.set', id: 'uiScale', index });
-    await waitFor(() => notes.evaluate(`document.body.style.zoom === '${[0.92, 0.89, 0.86][index]}'`), 'notes interface scale');
+    await waitFor(() => notes.evaluate(`document.body.style.zoom === '${[0.92, 0.828, 0.736][index]}'`), 'notes interface scale');
     const geometry = await notes.evaluate("(() => {const r=document.querySelector('.notes-document').getBoundingClientRect(); return {right:r.right,bottom:r.bottom,width:innerWidth,height:innerHeight};})()");
     assert.ok(geometry.right <= geometry.width + 1 && geometry.bottom <= geometry.height + 1, `notes workspace fits: ${JSON.stringify(geometry)}`);
     await delay(300);

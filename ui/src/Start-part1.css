@@ -33,9 +33,19 @@
 
 /* Une photo choisie remplace l'image de Sol : fond uni le temps qu'elle arrive, puis la photo (posée par Start.tsx). */
 :root[data-wallpaper="true"][data-wallpaper-photo="true"] .start-body {
-  background-color: #050505;
+  --start-photo-veil: rgb(255 255 255 / 68%);
+  --start-photo-shade: linear-gradient(90deg, var(--start-photo-veil) 46%, transparent 92%);
+  background-color: var(--chrome-bg);
   background-image: none;
-  color: #fff;
+}
+:root[data-wallpaper="true"][data-wallpaper-photo="true"][data-theme="dark"] .start-body {
+  --start-photo-veil: rgb(0 0 0 / 66%);
+  --text-dim: #e8e8eb;
+}
+@media (max-width: 680px) {
+  :root[data-wallpaper="true"][data-wallpaper-photo="true"] .start-body {
+    --start-photo-shade: linear-gradient(var(--start-photo-veil), var(--start-photo-veil));
+  }
 }
 .start-credit {
   position: fixed;
@@ -70,10 +80,9 @@
 
 .start-brand { display:flex; align-items:center; gap:10px; margin-bottom:36px; }
 .start-brand img { width:44px; height:44px; border-radius:12px; }
-:root:is([data-theme="dark"], [data-wallpaper-photo="true"]) .start-brand img { background: #e8e8eb; }
+:root[data-theme="dark"] .start-brand img { background: #e8e8eb; }
 .start-brand > span { font-size:30px; font-weight:500; letter-spacing:-.065em; }
 .start-brand small { margin:5px 0 0 12px; padding-left:12px; border-left:1px solid var(--border-card); color:var(--text-dim); font-size:12.5px; line-height:18px; }
-:root[data-wallpaper-photo="true"] .start-brand small { color:rgba(255, 255, 255, 0.8); border-color:rgba(255, 255, 255, 0.28); }
 
 .start-section {
   margin: 0 0 38px;
@@ -86,7 +95,7 @@
   letter-spacing: -0.024em;
   color: inherit;
 }
-:root[data-wallpaper="true"]:is([data-theme="dark"], [data-wallpaper-photo="true"]) .start-content h2 {
+:root[data-wallpaper="true"][data-theme="dark"] .start-content h2 {
   text-shadow: 0 1px 10px rgba(0, 0, 0, 0.28);
 }
 
@@ -100,7 +109,6 @@
 }
 .start-heading h1 { font-size: 20px; margin: 0 0 6px; }
 .start-heading p { margin: 0; color: var(--text-dim); font-size: 13px; }
-:root[data-wallpaper-photo="true"] .start-heading p { color: rgba(255, 255, 255, 0.85); }
 
 .start-section-head {
   display: flex;
@@ -126,9 +134,9 @@
   .start-more:hover { background: var(--bg-glass-pill-hover); }
 }
 /* Voile sombre comme le crédit photo : le texte blanc reste lisible sur une zone claire de l'image. */
-:root[data-wallpaper="true"]:is([data-theme="dark"], [data-wallpaper-photo="true"]) .start-more { background: rgba(0, 0, 0, 0.32); color: #fff; }
+:root[data-wallpaper="true"][data-theme="dark"] .start-more { background: rgba(0, 0, 0, 0.32); color: #fff; }
 @media (hover: hover) and (pointer: fine) {
-  :root[data-wallpaper="true"]:is([data-theme="dark"], [data-wallpaper-photo="true"]) .start-more:hover { background: rgba(0, 0, 0, 0.48); }
+  :root[data-wallpaper="true"][data-theme="dark"] .start-more:hover { background: rgba(0, 0, 0, 0.48); }
 }
 /* Grille Safari des Favoris : jusqu'à 9 tuiles squircle par rangée, centrées avec leur libellé dessous. */
 .start-favorites {
@@ -217,7 +225,7 @@
   overflow: hidden;
   word-break: break-word;
 }
-:root[data-wallpaper="true"]:is([data-theme="dark"], [data-wallpaper-photo="true"]) .start-site-label {
+:root[data-wallpaper="true"][data-theme="dark"] .start-site-label {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6), 0 0 8px rgba(0, 0, 0, 0.45); /* lisible sur une zone blanche de l'image */
 }
 

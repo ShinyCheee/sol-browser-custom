@@ -9,13 +9,17 @@ namespace Browser.App;
 public sealed partial class BrowserController
 {
     private (int Count, int Active, bool Docked) _downloadSummary;
+    private readonly HashSet<string> _dockBatch = new();
 
     private void UpdateDock()
     {
-        var shown = _settings.FloatingDownloads
-            ? _downloads.Where(d => DownloadPending(d.Id,d.Op)
-                || (_finishedAt.TryGetValue(d.Id, out var at) && DateTime.UtcNow - at < Linger(d.Op))).ToList()
-            : [];
+        var now = DateTime.UtcNow;
+        var recent = _downloads.Where(d => DownloadPending(d.Id, d.Op)
+            || (_finishedAt.TryGetValue(d.Id, out var at) && now - at < Linger(d.Op))).ToList();
+        // Le compteur conserve le total du lot jusqu'à ce que le dernier téléchargement quitte l'encart.
+        if (recent.Count == 0) _dockBatch.Clear();
+        else _dockBatch.UnionWith(recent.Select(d => d.Id));
+        var shown = _settings.FloatingDownloads ? _downloads.Where(d => _dockBatch.Contains(d.Id)).ToList() : [];
         _dockShown = shown.Count > 0;
         // Mise à jour de Sol en téléchargement ou prête : l'encart l'annonce, jusqu'à « Plus tard ».
         var update = _updateDismissed ? null : Program.Update;
@@ -42,6 +46,7 @@ public sealed partial class BrowserController
     private string DownloadsJson(IEnumerable<(string Id, DownloadOperation Op, string TabId, bool IsPrivate)> downloads) => JsonSerializer.Serialize(new
     {
         popup = "downloads",
+        floating = _settings.FloatingDownloads,
         items = downloads.Select(d => new
         {
             id = d.Id, phase = d.Op.Phase,

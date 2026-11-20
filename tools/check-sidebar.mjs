@@ -77,7 +77,7 @@ try {
   await toolbar.evaluate(`document.querySelector('#tooltip-check').remove()`);
   for (const index of [0,1,2]) {
     await command({type:'settings.set',id:'uiScale',index});
-    await host.wait(()=>ui.evaluate(`Number(getComputedStyle(document.body).zoom)===${[.92,.89,.86][index]}`),'requested UI scale applied before dragging');
+    await host.wait(()=>ui.evaluate(`Number(getComputedStyle(document.body).zoom)===${[.92,.828,.736][index]}`),'requested UI scale applied before dragging');
     const drawerWidth=await ui.evaluate('innerWidth');
     await ui.evaluate(`(()=>{window.__sidebarFrames=[];const record=()=>{window.__sidebarFrames.push(document.querySelector('.workspace-page').getBoundingClientRect().left);if(window.__sidebarFrames.length<40)requestAnimationFrame(record)};requestAnimationFrame(record)})()`);
     await toolbar.evaluate(`chrome.webview.postMessage('{"type":"sidebar.toggle"}');setTimeout(()=>chrome.webview.postMessage('{"type":"sidebar.toggle"}'),70);setTimeout(()=>chrome.webview.postMessage('{"type":"sidebar.toggle"}'),110);setTimeout(()=>chrome.webview.postMessage('{"type":"sidebar.toggle"}'),160)`);

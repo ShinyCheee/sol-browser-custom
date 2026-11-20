@@ -35,7 +35,7 @@ public sealed partial class PageHost
         }
         try
         {
-            if (hidden && settings.MemorySaver)
+            if (hidden && settings.MemorySaver && !MustKeepAwake(id, core))
                 core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low;
             else if (!hidden)
             {
@@ -66,9 +66,7 @@ public sealed partial class PageHost
             if (view.CoreWebView2 is not { } core) continue;
             try
             {
-                if (core.IsDocumentPlayingAudio) { _hiddenSince[id] = now; continue; } // musique, appel : il reste éveillé
-                var busy = KeepAwake(id) || _pip == id || _sims.ContainsKey(id) || _loading.Contains(id);
-                if (busy) { _hiddenSince[id] = now; continue; }
+                if (MustKeepAwake(id, core)) { _hiddenSince[id] = now; continue; }
                 if (!IsPrivate(id) && !_discardProtected.Contains(id) && now - since >= policy.Item2 && core.Source.StartsWith("http", StringComparison.Ordinal) && !_errorUrl.ContainsKey(id)) _ = DiscardIfSafeAsync(id, core);
                 else if (now - since >= policy.Item1 && !core.IsSuspended && !_suspendRefused.Contains(id)) _ = SuspendAsync(id, core);
             }
@@ -84,8 +82,7 @@ public sealed partial class PageHost
         {
             await RestCoreAsync(id, core);
             if (Core(id) != core) return;
-            if (!settings.MemorySaver || !_hiddenSince.ContainsKey(id) || KeepAwake(id)
-                || _pip == id || _sims.ContainsKey(id) || _loading.Contains(id) || core.IsDocumentPlayingAudio) Wake(id, core);
+            if (!settings.MemorySaver || !_hiddenSince.ContainsKey(id) || MustKeepAwake(id, core)) Wake(id, core);
         }
         catch (Exception error) when (error is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
         finally { _saving.Remove(core); }
@@ -97,7 +94,7 @@ public sealed partial class PageHost
         {
             core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Normal;
             if (await core.TrySuspendAsync()) DebugLog.Write($"memory.suspend {id} True");
-            else
+            else if (!MustKeepAwake(id, core))
             {
                 // Le moteur peut garder une activité vivante : réduire la mémoire sans bloquer ses scripts.
                 core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low;
@@ -107,7 +104,7 @@ public sealed partial class PageHost
         }
         catch (Exception error) when (error is InvalidOperationException or System.Runtime.InteropServices.COMException)
         {
-            if (Core(id) == core && _hiddenSince.ContainsKey(id))
+            if (Core(id) == core && _hiddenSince.ContainsKey(id) && !MustKeepAwake(id, core))
             {
                 try { core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low; _suspendRefused.Add(id); }
                 catch (Exception closed) when (closed is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
@@ -146,15 +143,13 @@ public sealed partial class PageHost
                     && ![...document.querySelectorAll('video,audio')].some(e => !e.paused && !e.ended);
                 } catch { return false; } })()").AsTask().WaitAsync(TimeSpan.FromSeconds(4));
             if (safe == "true" && settings.MemorySaver && _hiddenSince.ContainsKey(id)
-                && CoreOf(id) == core && core.Source == source && !_loading.Contains(id) && !KeepAwake(id)
-                && _pip != id && !_sims.ContainsKey(id) && !_previews.ContainsKey(id) && !core.IsDocumentPlayingAudio) Discard(id, core);
+                && CoreOf(id) == core && core.Source == source && !_previews.ContainsKey(id) && !MustKeepAwake(id, core)) Discard(id, core);
             else if (settings.MemorySaver && _hiddenSince.ContainsKey(id) && CoreOf(id) == core)
             {
-                if (KeepAwake(id) || _pip == id || _sims.ContainsKey(id) || _loading.Contains(id) || core.IsDocumentPlayingAudio) return;
+                if (MustKeepAwake(id, core)) return;
                 _discardProtected.Add(id); // Un brouillon reste endormi sans être réveillé à chaque passage.
                 await RestCoreAsync(id, core);
-                if (!settings.MemorySaver || !_hiddenSince.ContainsKey(id) || KeepAwake(id)
-                    || _pip == id || _sims.ContainsKey(id) || _loading.Contains(id) || core.IsDocumentPlayingAudio) Wake(id, core);
+                if (!settings.MemorySaver || !_hiddenSince.ContainsKey(id) || MustKeepAwake(id, core)) Wake(id, core);
             }
         }
         catch (TimeoutException)
@@ -184,16 +179,18 @@ public sealed partial class PageHost
         settings.PageZoom = zoom;
         PageZoom.Set(zoom);
         RuntimeChanged?.Invoke();
-        _ = RelayZoomAsync();
+        _ = RelayZoomAsync(++_zoomGeneration);
     }
 
     // Une page relaie la demande à l'extension de son profil. Une vue en veille n'exécute rien et une page qui démarre n'a
     // pas encore son script : la vue affichée passe d'abord, et la demande (sans effet si le zoom est déjà bon) est répétée.
-    private async Task RelayZoomAsync()
+    private int _zoomGeneration;
+    private async Task RelayZoomAsync(int generation)
     {
         foreach (var wait in new[] { 0, 500, 1500 })
         {
             await Task.Delay(wait);
+            if (generation != _zoomGeneration) return;
             var relays = _views.Where(v => v.Value.CoreWebView2 is { IsSuspended: false })
                 .OrderByDescending(v => _visible.Contains(v.Key))
                 .Select(v => v.Value.CoreWebView2).DistinctBy(c => c.Profile.ProfileName).ToArray();

@@ -30,6 +30,7 @@ export function NotificationStack({
   onViewAll,
   maxVisible = 3,
   collapsedLabel = t("Notifications", "Notifications"),
+  footerAction,
   expandedLabel = t("Voir tout", "View all"),
   emptyLabel = t("Tout est à jour", "All caught up"),
   ariaLabel,
@@ -38,6 +39,7 @@ export function NotificationStack({
 }: NotificationStackProps) {
   const reduce = useReducedMotion();
   const rootRef = useRef<HTMLDivElement>(null);
+  const footerRef = useRef<HTMLButtonElement>(null);
   // What the last gesture on the stack was, and whether it was already
   // expanded when that gesture started. A click reports neither.
   const tap = useTapGesture<boolean>();
@@ -55,8 +57,8 @@ export function NotificationStack({
     behavior: "consume",
   });
 
-  const visibleItems = isExpanded ? items : items.slice(0, Math.max(1, maxVisible));
-  const primaryItem = visibleItems[0];
+  const compact = !isExpanded && maxVisible === 0;
+  const visibleItems = isExpanded ? items : items.slice(0, maxVisible);
   const transition: Transition = reduce ? { duration: 0 } : SPRING_LAYOUT;
   const cardTransition: Transition = reduce
     ? { duration: 0 }
@@ -65,7 +67,7 @@ export function NotificationStack({
     ? { duration: 0 }
     : { duration: 0.26, ease: EASE_OUT };
 
-  if (!primaryItem) {
+  if (!items.length) {
     return (
       <div
         className={cn(
@@ -91,8 +93,7 @@ export function NotificationStack({
     if (event.key !== "Escape") return;
     event.preventDefault();
     collapse();
-    // Focus stays where the keyboard put it. Blurring here collapsed the stack
-    // *and* threw the user back to the top of the document.
+    footerRef.current?.focus();
   };
 
   const handleClick = () => {
@@ -119,7 +120,7 @@ export function NotificationStack({
     <motion.div
       ref={rootRef}
       role="region"
-      tabIndex={0}
+      tabIndex={compact ? undefined : 0}
       initial={false}
       aria-expanded={isExpanded}
       aria-label={ariaLabel ?? (
@@ -145,7 +146,7 @@ export function NotificationStack({
         className,
       )}
     >
-      <span className="relative block p-3">
+      <span className={cn("relative block", compact ? "p-1.5" : "p-3")}>
         <motion.span
           aria-hidden="true"
           layout
@@ -153,7 +154,7 @@ export function NotificationStack({
           transition={backgroundTransition}
           className="absolute inset-0 rounded-3xl bg-muted"
         />
-        <span
+        {!compact && <span
           className={cn(
             "relative z-10 grid gap-1",
             !isExpanded && "pb-2",
@@ -200,41 +201,43 @@ export function NotificationStack({
               </motion.span>
             );
           })}
-        </span>
+        </span>}
 
-        <motion.button
-          type="button" onClick={handleClick} aria-expanded={isExpanded}
-          layout="position"
-          transition={transition}
-          className={cn(
-            "relative z-10 mt-2 flex min-h-9 items-center gap-2 px-1",
-            classNames?.footer,
-          )}
-        >
-          <span
+        <span className={classNames?.controls}>
+          <motion.button
+            ref={footerRef}
+            type="button" onClick={handleClick} aria-expanded={isExpanded}
+            layout="position"
+            transition={transition}
             className={cn(
-              "grid size-7 shrink-0 place-items-center rounded-full bg-orange-600 text-xs font-medium text-white shadow-[inset_0_1px_2px_rgb(0_0_0/0.2),inset_0_-1px_0_rgb(255_255_255/0.16)] dark:bg-orange-500",
-              classNames?.count,
+              "relative z-10 flex min-h-9 items-center gap-2 px-1",
+              !compact && !classNames?.controls && "mt-2",
+              classNames?.footer,
             )}
           >
-            {items.length}
-          </span>
-          <span className="flex items-center text-sm font-medium">
-            <ActionSwapText
-              value={isExpanded ? "expanded" : "collapsed"}
-              animation="roll"
-            >
-              {isExpanded ? (
-                <span className="inline-flex items-center gap-1">
-                  {expandedLabel}
-                  <AnimatedIcon name="collapse" size={14}/>
+            {compact ? collapsedLabel : (
+              <>
+                <span className={cn(
+                  "grid size-7 shrink-0 place-items-center rounded-full bg-orange-600 text-xs font-medium text-white shadow-[inset_0_1px_2px_rgb(0_0_0/0.2),inset_0_-1px_0_rgb(255_255_255/0.16)] dark:bg-orange-500",
+                  classNames?.count,
+                )}>
+                  {items.length}
                 </span>
-              ) : (
-                collapsedLabel
-              )}
-            </ActionSwapText>
-          </span>
-        </motion.button>
+                <span className="flex items-center text-sm font-medium">
+                  <ActionSwapText value={isExpanded ? "expanded" : "collapsed"} animation="roll">
+                    {isExpanded ? (
+                      <span className="inline-flex items-center gap-1">
+                        {expandedLabel}
+                        <AnimatedIcon name="collapse" size={14} />
+                      </span>
+                    ) : collapsedLabel}
+                  </ActionSwapText>
+                </span>
+              </>
+            )}
+          </motion.button>
+          {footerAction}
+        </span>
       </span>
     </motion.div>
   );

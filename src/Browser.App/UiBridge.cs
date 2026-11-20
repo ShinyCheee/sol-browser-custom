@@ -45,21 +45,26 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
     {
         var on = Settings;
         var systemDark = IsSystemDark();
-        if (pages is not null && _activeId is not null && pages.CoreOf(_activeId) is { } ownPage && ownPage.Source is Settings.DefaultHomePage or QuickNotes.PageUrl)
+        var photo = on?.StartWallpaper == true ? WallpaperTint : null;
+        var startDark = photo is { } color
+            ? (0.299 * color.R + 0.587 * color.G + 0.114 * color.B) / 255 < 0.42
+            : systemDark;
+        var startAccent = photo is { } tint ? $"rgb({tint.R}, {tint.G}, {tint.B})" : null;
+        var source = pages is not null && _activeId is not null ? pages.CoreOf(_activeId)?.Source : null;
+        var internalPage = source is Settings.DefaultHomePage or QuickNotes.PageUrl;
+        if (internalPage)
         {
-            var wall = ownPage.Source == Settings.DefaultHomePage && on?.StartWallpaper == true;
-            var darkStart = on?.Theme == "dark" || (systemDark && (on?.Theme == "system" || (wall && on?.Theme == "page")));
-            var photoTint = wall ? WallpaperTint : null;
-            var fallback = wall
-                ? darkStart ? "rgb(5, 5, 5)" : "rgb(242, 242, 244)"
-                : darkStart ? "rgb(9, 9, 11)" : "rgb(238, 240, 226)";
-            s_lastProbe = (photoTint ?? fallback, photoTint is not null || darkStart, null);
+            var start = source == Settings.DefaultHomePage;
+            var ownDark = on?.Theme == "dark" || (on?.Theme == "system" && systemDark) || (start && on?.Theme == "page" && startDark);
+            var background = ownDark ? "rgb(9, 9, 11)" : "rgb(238, 240, 226)";
+            var wallpaper = start ? startAccent : null;
+            s_lastProbe = (wallpaper ?? background, ownDark, wallpaper);
         }
         if (s_lastProbe is not var (bg, dark, accent)) return;
-        accent = AmbientAccent ?? accent; // ce que la page montre à l'instant, sinon la couleur annoncée par le site
+        if (!internalPage) accent = AmbientAccent ?? accent;
         var json = JsonSerializer.Serialize(new
         {
-            @event = "theme", bg, dark, accent, mode = on?.Theme ?? "page", systemDark, lang = Language.Current,
+            @event = "theme", bg, dark, accent, mode = on?.Theme ?? "page", systemDark, startDark, startAccent, lang = Language.Current,
             privateMode = AppPaths.Private || _activePrivate,
             font = on?.Font ?? "default",
             uiScale = on?.UiFactor ?? 0.92,
@@ -173,7 +178,7 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
     }
 
     /// <summary>Teinte de la photo choisie. Null laisse le thème déterminer la teinte du fond Sol.</summary>
-    public static string? WallpaperTint { get; set; }
+    public (byte R, byte G, byte B)? WallpaperTint { get; set; }
 
     /// <summary>La couleur de la page affichée a changé sans navigation (nouveau fond d'accueil) : elle est relue.</summary>
     public void RefreshPageColor() => _ = SampleOnceAsync();

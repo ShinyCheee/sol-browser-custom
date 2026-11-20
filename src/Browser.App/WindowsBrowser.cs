@@ -23,12 +23,14 @@ public static class WindowsBrowser
         try
         {
             using var classes = Registry.CurrentUser.CreateSubKey(@"Software\Classes");
+            var fileIcon = Path.Combine(Path.GetDirectoryName(exe)!, "Assets", "SolFile.ico");
             foreach (var (id, name) in new[] { (Document, "Sol document"), (Link, "Sol link") })
             {
                 using var kind = classes.CreateSubKey(id);
                 kind.SetValue("", name);
                 if (id == Link) kind.SetValue("URL Protocol", "");
-                using (var icon = kind.CreateSubKey("DefaultIcon")) icon.SetValue("", $"\"{exe}\",0");
+                var iconPath = id == Document && File.Exists(fileIcon) ? fileIcon : exe;
+                using (var icon = kind.CreateSubKey("DefaultIcon")) icon.SetValue("", $"\"{iconPath}\",0");
                 using var command = kind.CreateSubKey(@"shell\open\command");
                 command.SetValue("", $"\"{exe}\" \"%1\"");
             }

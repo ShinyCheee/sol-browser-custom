@@ -32,7 +32,7 @@ export async function runBaseNavigation(ctx) {
   const sidebar = await connect(sidebarTarget);
   for (const index of [1, 2, 0]) {
     await command({ type: 'settings.set', id: 'uiScale', index });
-    await waitFor(() => sidebar.evaluate(`document.body.style.zoom === '${[0.92, 0.89, 0.86][index]}'`), 'sidebar interface scale');
+    await waitFor(() => sidebar.evaluate(`document.body.style.zoom === '${[0.92, 0.828, 0.736][index]}'`), 'sidebar interface scale');
     await delay(150);
     assert.ok(
       await sidebar.evaluate('Array.from(document.querySelectorAll(".sidebar-quick-actions button")).every(b => b.getBoundingClientRect().top >= 0 && b.getBoundingClientRect().bottom <= innerHeight)'),
@@ -118,7 +118,7 @@ export async function runBaseNavigation(ctx) {
 
   await command({ type: 'settings.set', id: 'theme', index: 0 });
   await other.evaluate("document.body.style.cssText='background:#121212;min-height:100vh;color:white'; document.body.firstElementChild.style.background='transparent';");
-  await waitFor(() => ctx.ui.evaluate('document.documentElement.dataset.theme === "dark" && getComputedStyle(document.documentElement).getPropertyValue("--page-bg").trim() === "rgb(18, 18, 18)"'), 'dark page theme');
+  await waitFor(() => ctx.ui.evaluate('document.documentElement.dataset.theme === "dark" && document.documentElement.style.getPropertyValue("--page-real") === "rgb(18, 18, 18)"'), 'dark page theme');
   await other.evaluate('document.body.style.backgroundColor = "#fafafa"');
   await waitFor(() => ctx.ui.evaluate('document.documentElement.dataset.theme === "light"'), 'site switches to light without navigation');
   await other.evaluate('document.body.style.backgroundColor = "#121212"');
@@ -144,7 +144,7 @@ export async function runBaseNavigation(ctx) {
     }
   }
   await other.evaluate('document.body.style.backgroundColor = "color(display-p3 0.035 0.035 0.035)"');
-  await waitFor(() => ctx.ui.evaluate('document.documentElement.style.getPropertyValue("--page-bg") === "rgb(9, 9, 9)"'), 'display-p3 dark background');
+  await waitFor(() => ctx.ui.evaluate('document.documentElement.style.getPropertyValue("--page-real") === "rgb(9, 9, 9)"'), 'display-p3 dark background');
   console.log('PASS modern CSS colors and dynamic accents in all browser themes');
 
   if (process.env.SOL_CHECK_DEVBENIN === '1') {

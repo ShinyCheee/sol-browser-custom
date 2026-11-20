@@ -13,7 +13,9 @@ const samples=[
  {name:'notes',bg:'rgb(238, 240, 226)',accent:null,dark:false},
  {name:'gray',bg:'rgb(220, 220, 220)',accent:null,dark:false},
  {name:'dark',bg:'#101424',accent:'#315adf',dark:true},
- {name:'forced-light',bg:'#080a15',accent:'#315adf',dark:true,mode:'light',expected:'rgb(243, 243, 246)'},
+ {name:'forced-light',bg:'#080a15',accent:'#315adf',dark:true,mode:'light',expected:'#eef0e2'},
+ {name:'system-light',bg:'#080a15',accent:'#315adf',dark:true,mode:'system',systemDark:false},
+ {name:'system-dark',bg:'#e7b222',accent:'#f5c518',dark:false,mode:'system',systemDark:true},
  {name:'forced-dark',bg:'#e7b222',accent:'#f5c518',dark:false,mode:'dark',expected:'rgb(9, 9, 11)'},
  {name:'private',bg:'#e7b222',accent:'#f5c518',dark:false,privateMode:true,expected:'#eee7f7'},
  {name:'no-tint',bg:'#e7b222',accent:'#f5c518',dark:false,tint:{sidebar:false,background:false,topbar:false,menus:false}},
@@ -21,10 +23,13 @@ const samples=[
 try{
  ui=await host.launch(720);
  await host.wait(()=>ui.evaluate('window.__sidebarState.tabs.every(t=>!t.loading)'),'initial local tabs loaded');await delay(800);
+ const observed = new Map();
  for(const {name,expected,...theme} of samples){
   // Measure in the same task: periodic native theme messages can replace a fixture between CDP calls.
   const colors=await ui.evaluate(`(()=>{chrome.webview.dispatchEvent(new MessageEvent('message',{data:${JSON.stringify({event:'theme',mode:'page',...theme})}}));const canvas=document.createElement('canvas');canvas.width=canvas.height=1;const c=canvas.getContext('2d'),pixel=color=>{c.clearRect(0,0,1,1);c.fillStyle=color;c.fillRect(0,0,1,1);return [...c.getImageData(0,0,1,1).data]},side=getComputedStyle(document.querySelector('.workspace-sidebar'));return {applied:document.documentElement.style.getPropertyValue('--page-bg'),top:pixel(getComputedStyle(document.querySelector('.workspace')).backgroundColor),side:pixel(side.backgroundColor),text:pixel(side.color),image:side.backgroundImage}})()`);
-  assert.equal(colors.applied,expected??theme.bg,`${name}: the requested theme was applied`);
+  const dark = theme.mode === 'dark' || (theme.mode === 'system' ? theme.systemDark : theme.mode === 'light' ? false : theme.dark);
+  assert.equal(colors.applied,expected??(dark?'rgb(9, 9, 11)':'#eef0e2'),`${name}: the requested theme was applied`);
+  observed.set(name, colors);
   assert.deepEqual(colors.top,colors.side,`${name}: sidebar and top have the same surface color`);
   assert.equal(colors.image,'none',`${name}: no gradient creates a seam at the top`);
   assert.equal(colors.top[3],255,`${name}: chrome stays opaque`);
@@ -32,5 +37,8 @@ try{
   const a=luminance(colors.side),b=luminance(colors.text);
   assert.ok((Math.max(a,b)+.05)/(Math.min(a,b)+.05)>=4.5,`${name}: sidebar text stays readable`);
  }
+ assert.deepEqual(observed.get('forced-light'),observed.get('system-light'));
+ assert.deepEqual(observed.get('forced-dark'),observed.get('system-dark'));
+ assert.notDeepEqual(observed.get('blue').side, observed.get('red').side, 'site tint remains dynamic');
  console.log(JSON.stringify({passed:'matching sidebar and top colors; yellow/red/blue/neutral/dark; forced themes; private mode; tint disabled; opaque surfaces and text contrast',evidence:host.base}));
 }finally{if(ui)await host.close(ui).catch(()=>{});await host.dispose()}

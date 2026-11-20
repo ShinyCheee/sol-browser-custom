@@ -69,6 +69,7 @@ public sealed partial class PageHost
         await WirePreviewLinksAsync(tab.Id,core);
         await WireWebAppsAsync(tab.Id, core);
         await WireVideoAsync(tab.Id, core);
+        await WireRealtimeMediaAsync(tab.Id, core);
         core.SetVirtualHostNameToFolderMapping("start.sol", Path.Combine(AppContext.BaseDirectory, "ui"), CoreWebView2HostResourceAccessKind.Deny);
         core.WebMessageReceived += (_, e) =>
         {

@@ -31,6 +31,7 @@
         <uap3:Extension Category="windows.fileTypeAssociation">
           <uap3:FileTypeAssociation Name="solweb" Parameters="&quot;%1&quot;">
             <uap:DisplayName>Document web Sol</uap:DisplayName>
+            <uap:Logo>StoreAssets\FileLogo.png</uap:Logo>
             <uap:SupportedFileTypes>
               <uap:FileType>.htm</uap:FileType><uap:FileType>.html</uap:FileType>
               <uap:FileType>.shtml</uap:FileType><uap:FileType>.xhtml</uap:FileType>

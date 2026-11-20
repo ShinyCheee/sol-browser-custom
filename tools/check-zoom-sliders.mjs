@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
-import {readFile,writeFile,access} from 'node:fs/promises';
+import {readFile,writeFile,access,mkdir} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {sidebarHost} from './sidebar-check-host.mjs';
 const host=await sidebarHost(process.argv[2]??'src/Browser.App/bin/x64/Release/net10.0-windows10.0.19041.0/win-x64/Sol.exe');
+const evidence=resolve('bin/appearance-review');
+await mkdir(evidence,{recursive:true});
 let sidebar,popup,page;
 const cmd=c=>sidebar.evaluate(`chrome.webview.postMessage(${JSON.stringify(JSON.stringify(c))})`);
 const settings=async()=>{
@@ -29,10 +31,11 @@ const open=async()=>{
   await cmd({type:'settings.open',x:980,y:65});popup=await host.connect('#popup');
   await host.wait(()=>popup.evaluate('!!document.querySelector(".settings-popup")').catch(()=>false),'settings ready');
 };
-const zoom=async expected=>{
+const zoom=async(expected,checkSlider=true)=>{
   await host.wait(()=>settings().then(s=>Math.abs(s.PageZoom-expected/100)<.0001),'saved page zoom');
-  await host.wait(()=>page.evaluate(`Math.abs(devicePixelRatio-${expected/100})<.001`),'real page zoom');
-  await host.wait(()=>percent('Zoom des pages').then(value=>value===expected),'rendered page zoom');
+  await host.wait(()=>page.evaluate(`Math.abs(devicePixelRatio-${expected/100})<.001`),`real page zoom at ${expected}%`)
+    .catch(async error=>{console.error('Zoom received by WebView2:',await page.evaluate('devicePixelRatio'));throw error;});
+  if(checkSlider)await host.wait(()=>percent('Zoom des pages').then(value=>value===expected),'rendered page zoom');
 };
 const point=(label,ratio)=>popup.evaluate(`(()=>{const r=document.querySelector(${JSON.stringify(slider(label))}).parentElement.getBoundingClientRect();return {x:r.left+r.width*${ratio},y:r.top+r.height/2}})()`);
 const pointer=(type,p,buttons)=>popup.call('Input.dispatchMouseEvent',{type,...p,button:'left',buttons,clickCount:1});
@@ -49,6 +52,17 @@ try{
   for(let expected=195;expected>=50;expected-=5){await cmd({type:'zoom.out'});await zoom(expected);}
   await key('Zoom des pages','ArrowLeft',37);await zoom(50);
   await key('Zoom des pages','End',35);await zoom(200);
+  await cmd({type:'popup.close'});
+  const startUrl='https://start.sol/index.html#start';
+  await cmd({type:'tab.open',url:startUrl});
+  const start=await host.connect(startUrl);
+  await host.wait(()=>start.evaluate('!!document.querySelector(".start-brand")&&document.documentElement.classList.contains("painted")'),'new tab ready');
+  await cmd({type:'zoom.set',index:120});await zoom(120,false);
+  assert.equal(await start.evaluate('devicePixelRatio'),1,'changing the default from the new tab preserves its own zoom');
+  const site=(await sidebar.evaluate('window.__sidebarState')).tabs.find(tab=>tab.url===host.origin+'/2');
+  await cmd({type:'tab.activate',id:site.id});
+  await open();
+  await zoom(120);
   await cmd({type:'zoom.set',index:105});await zoom(105);
   await cmd({type:'zoom.set',index:52});await zoom(105);
   await pointer('mousePressed',await point('Zoom des pages',.3),1);await zoom(95);
@@ -64,7 +78,7 @@ try{
   await pointer('mouseReleased',await point('Taille de l’interface',.5),0);
   await key('Taille de l’interface','End',35);await host.wait(()=>settings().then(s=>s.UiScale===1),'interface drag resets');
   await host.wait(()=>percent('Taille de l’interface').then(value=>value===100),'interface reset rendered');
-  for(const [expected,factor] of [[95,.905],[90,.89],[85,.875],[80,.86]]){
+  for(const [expected,factor] of [[95,.874],[90,.828],[85,.782],[80,.736]]){
     await key('Taille de l’interface','ArrowLeft',37);
     await host.wait(()=>settings().then(s=>s.UiScale===expected/100),'saved interface size');
     await host.wait(()=>sidebar.evaluate(`Number(document.body.style.zoom)===${factor}`),'native and web interface sizes agree');
@@ -86,11 +100,15 @@ try{
     assert.equal(await popup.evaluate(`(()=>{const h=document.querySelector(${JSON.stringify(slider('Taille de l’interface'))}),r=h.parentElement.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth+1&&document.documentElement.scrollWidth<=innerWidth+1})()`),true,'slider fits narrow settings');
   }
   await popup.call('Emulation.clearDeviceMetricsOverride');
-  await popup.call('Page.captureScreenshot',{format:'png'}).then(r=>writeFile(resolve(host.base,'interface-slider.png'),Buffer.from(r.data,'base64')));
+  await popup.call('Page.captureScreenshot',{format:'png'}).then(r=>writeFile(resolve(evidence,'interface-slider.png'),Buffer.from(r.data,'base64')));
   await host.close(sidebar);sidebar=null;sidebar=await host.launch();page=await host.connect(host.origin+'/2');await open();
   await zoom(105);await section('Apparence');assert.equal(await percent('Taille de l’interface'),95,'interface size survives restart');
-  await section('Général');await popup.call('Page.captureScreenshot',{format:'png'}).then(r=>writeFile(resolve(host.base,'page-zoom-slider.png'),Buffer.from(r.data,'base64')));
-  console.log(JSON.stringify({passed:'all page zoom steps 50–200 by 5; beUI keyboard sliders; interface 80/85/90/95/100; native/web scale agreement; independent zoom and persistence',evidence:host.base}));
+  await section('Général');await popup.call('Page.captureScreenshot',{format:'png'}).then(r=>writeFile(resolve(evidence,'page-zoom-slider.png'),Buffer.from(r.data,'base64')));
+  console.log(JSON.stringify({passed:'all page zoom steps 50–200 by 5; beUI keyboard sliders; interface 80/85/90/95/100; native/web scale agreement; independent zoom and persistence',evidence}));
+}catch(error){
+  console.error((await readFile(resolve(host.profile,'debug.log'),'utf8').catch(()=>'' )).split('\n').slice(-16).join('\n'));
+  if(popup)console.error(await popup.evaluate('({title:document.title,body:document.body.innerText.slice(0,240),width:innerWidth,height:innerHeight})').catch(()=>null));
+  throw error;
 }finally{
   if(sidebar)await host.close(sidebar).catch(()=>{});
   await host.dispose();assert.equal(await access(resolve(host.base,'profiles')).then(()=>true,()=>false),false,'test profiles and caches removed');

@@ -118,7 +118,7 @@ export async function runPalette(ctx) {
     await waitFor(() => popup.evaluate(`document.documentElement.dataset.theme === '${color}'`), 'palette theme');
     for (const scale of [0, 1, 2]) {
       await command({ type: 'settings.set', id: 'uiScale', index: scale });
-      await waitFor(() => popup.evaluate(`document.body.style.zoom === '${[0.92, 0.89, 0.86][scale]}'`), 'palette scale');
+      await waitFor(() => popup.evaluate(`document.body.style.zoom === '${[0.92, 0.828, 0.736][scale]}'`), 'palette scale');
       assert.ok(await popup.evaluate("document.querySelector('.palette-search input').getBoundingClientRect().width>100"));
       assert.ok(await popup.evaluate("document.querySelector('.palette-footer').getBoundingClientRect().bottom <= innerHeight + 2"), 'footer is visible without outer scrolling');
     }

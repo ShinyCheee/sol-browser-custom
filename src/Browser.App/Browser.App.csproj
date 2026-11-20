@@ -19,7 +19,7 @@
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <EnableMsixTooling>true</EnableMsixTooling>
-    <Version>1.2.17</Version>
+    <Version>1.2.18</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
@@ -39,6 +39,7 @@
     <Content Include="..\..\ui\node_modules\@mozilla\readability\Readability.js" Link="inject\Readability.js" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\ui\node_modules\@mozilla\readability\LICENSE.md" Link="inject\Readability-LICENSE.md" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Sol.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\SolFile.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="extensions\**" Exclude="extensions\ubol\**" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\ui\dist\**" Link="ui\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
