@@ -43,7 +43,7 @@
     <Content Include="extensions\**" Exclude="extensions\ubol\**" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\ui\dist\**" Link="ui\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
-  <Target Name="PrepareSolVoice" BeforeTargets="PrepareForBuild;AssignTargetPaths" Condition="'$(RuntimeIdentifier)' == 'win-x64' And '$(DesignTimeBuild)' != 'true'">
+  <Target Name="PrepareSolVoice" BeforeTargets="PrepareForBuild;AssignTargetPaths" Condition="'$(SolVoice)' == 'true' And '$(RuntimeIdentifier)' == 'win-x64' And '$(DesignTimeBuild)' != 'true'">
     <Exec Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\..\tools\prepare-voice-runtime.ps1&quot;" StandardOutputImportance="high" />
     <ItemGroup>
       <_VoiceRuntimeFiles Include="$(MSBuildProjectDirectory)\..\..\bin\voice-runtime\**\*" Exclude="$(MSBuildProjectDirectory)\..\..\bin\voice-runtime\**\__pycache__\**;$(MSBuildProjectDirectory)\..\..\bin\voice-runtime\**\*.pyc" />
