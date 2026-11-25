@@ -1,6 +1,6 @@
 ===== npm ci =====
 
-added 193 packages in 7s
+added 193 packages in 6s
 ===== ui build =====
 
 > build
@@ -8,7 +8,7 @@ added 193 packages in 7s
 
 [36mvite v8.3.2 [32mbuilding client environment for production...[36m[39m
 transforming...
-✓ 3104 modules transformed.
+✓ 3105 modules transformed.
 rendering chunks...
 computing gzip size...
 dist/index.html                                                        1.23 kB │ gzip:   0.51 kB
@@ -91,21 +91,21 @@ dist/assets/ease-DrrnO-bQ.js                                           0.39 kB �
 dist/assets/message-circle-question-mark-VbWVf6dK.js                   0.68 kB │ gzip:   0.40 kB
 dist/assets/MarkdownContent-CCJZF4dE.js                                0.85 kB │ gzip:   0.51 kB
 dist/assets/use-transform-BSZ5tgPp.js                                  1.22 kB │ gzip:   0.64 kB
-dist/assets/NoteMarkdownContent-Bx1ykITT.js                            1.81 kB │ gzip:   0.97 kB
+dist/assets/NoteMarkdownContent-C3cikZM5.js                            1.81 kB │ gzip:   0.97 kB
 dist/assets/AnimatePresence-DDPPUPsE.js                                4.23 kB │ gzip:   1.97 kB
-dist/assets/CornerActions-DPxdnE-f.js                                  4.83 kB │ gzip:   2.26 kB
-dist/assets/Start-BL6lOSfP.js                                          9.43 kB │ gzip:   3.31 kB
-dist/assets/SolVoice-BI3OV4Lv.js                                      11.00 kB │ gzip:   4.63 kB
+dist/assets/CornerActions-_ApoxcCC.js                                  4.83 kB │ gzip:   2.26 kB
+dist/assets/Start-RZuPxZgj.js                                          9.43 kB │ gzip:   3.31 kB
+dist/assets/SolVoice-P8Ipz1sN.js                                      11.00 kB │ gzip:   4.63 kB
 dist/assets/bridge-BzH_2Jpb.js                                        15.48 kB │ gzip:   5.81 kB
-dist/assets/SolChat-D23kUSin.js                                       17.88 kB │ gzip:   6.81 kB
-dist/assets/SolAiAction-CkiV-8_D.js                                   19.11 kB │ gzip:   7.11 kB
+dist/assets/SolChat-B3wV7ksx.js                                       17.88 kB │ gzip:   6.82 kB
+dist/assets/SolAiAction-xkgz0CwC.js                                   19.11 kB │ gzip:   7.11 kB
 dist/assets/input-BJVhixow.js                                         20.36 kB │ gzip:   8.41 kB
-dist/assets/Welcome-DWSedA54.js                                       22.70 kB │ gzip:   7.64 kB
-dist/assets/SolAiTrace-B3mPjJ4c.js                                    27.78 kB │ gzip:   9.18 kB
-dist/assets/NotesPage-BqTfY9ua.js                                     49.86 kB │ gzip:  15.80 kB
+dist/assets/Welcome-9gkM9zOO.js                                       22.70 kB │ gzip:   7.64 kB
+dist/assets/SolAiTrace-NGImq-0l.js                                    27.78 kB │ gzip:   9.18 kB
+dist/assets/NotesPage-DiwbrP_Z.js                                     49.86 kB │ gzip:  15.80 kB
 dist/assets/utils-BaW505Dk.js                                        160.01 kB │ gzip:  52.13 kB
-dist/assets/RichNoteContent-Cmtx7wx1.js                              330.90 kB │ gzip:  82.92 kB
-dist/assets/index-DkcL8lT8.js                                        570.74 kB │ gzip: 168.57 kB
+dist/assets/RichNoteContent-DoJo5oni.js                              330.90 kB │ gzip:  82.92 kB
+dist/assets/index-ESCK3hns.js                                        558.34 kB │ gzip: 165.04 kB
 dist/assets/markdown-Cu91nmNs.js                                     766.44 kB │ gzip: 233.44 kB
 
 [plugin builtin:vite-reporter] 
@@ -113,13 +113,13 @@ dist/assets/markdown-Cu91nmNs.js                                     766.44 kB �
 - Using dynamic import() to code-split the application
 - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-[32m✓ built in 751ms[39m
+[32m✓ built in 904ms[39m
 Copied minimal offline note editor assets and license
 Collected 160 UI license notices
 ===== core tests =====
   Determining projects to restore...
-  Restored D:\a\sol-browser-custom\sol-browser-custom\src\Browser.Core\Browser.Core.csproj (in 4.7 sec).
-  Restored D:\a\sol-browser-custom\sol-browser-custom\tests\Browser.Core.Tests\Browser.Core.Tests.csproj (in 4.84 sec).
+  Restored D:\a\sol-browser-custom\sol-browser-custom\src\Browser.Core\Browser.Core.csproj (in 4.77 sec).
+  Restored D:\a\sol-browser-custom\sol-browser-custom\tests\Browser.Core.Tests\Browser.Core.Tests.csproj (in 5.16 sec).
   Browser.Core -> D:\a\sol-browser-custom\sol-browser-custom\src\Browser.Core\bin\Release\net10.0\Browser.Core.dll
   Browser.Core.Tests -> D:\a\sol-browser-custom\sol-browser-custom\tests\Browser.Core.Tests\bin\Release\net10.0\Browser.Core.Tests.dll
 Test run for D:\a\sol-browser-custom\sol-browser-custom\tests\Browser.Core.Tests\bin\Release\net10.0\Browser.Core.Tests.dll (.NETCoreApp,Version=v10.0)
@@ -128,16 +128,16 @@ A total of 1 test files matched the specified pattern.
 Passed!  - Failed:     0, Passed:   605, Skipped:     0, Total:   605, Duration: 5 s - Browser.Core.Tests.dll (net10.0)
 ===== app build x64 =====
   Determining projects to restore...
-  Restored D:\a\sol-browser-custom\sol-browser-custom\src\Browser.Core\Browser.Core.csproj (in 180 ms).
-  Restored D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\Browser.App.csproj (in 21.8 sec).
+  Restored D:\a\sol-browser-custom\sol-browser-custom\src\Browser.Core\Browser.Core.csproj (in 231 ms).
+  Restored D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\Browser.App.csproj (in 22.9 sec).
   Browser.Core -> D:\a\sol-browser-custom\sol-browser-custom\src\Browser.Core\bin\x64\Release\net10.0\Browser.Core.dll
 D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\DeviceFrame.cs(90,70): warning CsWinRT1032: Collection expressions targeting non mutable interface type 'System.Collections.Generic.IReadOnlyList<string>' do not have a defined concrete type, and are not supported for trimming and AOT compatibility with WinRT scenarios (consider changing the target type to be a concrete type, a mutable interface type, or add an explicit cast for either of these on the collection expression, eg. '(string[])["A", "B", "C"]') (https://github.com/microsoft/CsWinRT/tree/master/src/Authoring/WinRT.SourceGenerator/AnalyzerReleases.Shipped.md) [D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\Browser.App.csproj]
 D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\DeviceFrame.cs(70,5): warning CsWinRT1032: Collection expressions targeting non mutable interface type 'System.Collections.Generic.IReadOnlyList<Browser.App.Device>' do not have a defined concrete type, and are not supported for trimming and AOT compatibility with WinRT scenarios (consider changing the target type to be a concrete type, a mutable interface type, or add an explicit cast for either of these on the collection expression, eg. '(string[])["A", "B", "C"]') (https://github.com/microsoft/CsWinRT/tree/master/src/Authoring/WinRT.SourceGenerator/AnalyzerReleases.Shipped.md) [D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\Browser.App.csproj]
-D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\ChatGptAccount.cs(125,35): warning CsWinRT1032: Collection expressions targeting non mutable interface type 'System.Collections.Generic.IEnumerable<(string Role, string Text)>' do not have a defined concrete type, and are not supported for trimming and AOT compatibility with WinRT scenarios (consider changing the target type to be a concrete type, a mutable interface type, or add an explicit cast for either of these on the collection expression, eg. '(string[])["A", "B", "C"]') (https://github.com/microsoft/CsWinRT/tree/master/src/Authoring/WinRT.SourceGenerator/AnalyzerReleases.Shipped.md) [D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\Browser.App.csproj]
 D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\CaptureService.cs(188,84): warning CsWinRT1032: Collection expressions targeting non mutable interface type 'System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, Windows.Graphics.Imaging.BitmapTypedValue>>' do not have a defined concrete type, and are not supported for trimming and AOT compatibility with WinRT scenarios (consider changing the target type to be a concrete type, a mutable interface type, or add an explicit cast for either of these on the collection expression, eg. '(string[])["A", "B", "C"]') (https://github.com/microsoft/CsWinRT/tree/master/src/Authoring/WinRT.SourceGenerator/AnalyzerReleases.Shipped.md) [D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\Browser.App.csproj]
-D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\WindowsBrowser.cs(136,57): warning CsWinRT1032: Collection expressions targeting non mutable interface type 'System.Collections.Generic.IEnumerable<string>' do not have a defined concrete type, and are not supported for trimming and AOT compatibility with WinRT scenarios (consider changing the target type to be a concrete type, a mutable interface type, or add an explicit cast for either of these on the collection expression, eg. '(string[])["A", "B", "C"]') (https://github.com/microsoft/CsWinRT/tree/master/src/Authoring/WinRT.SourceGenerator/AnalyzerReleases.Shipped.md) [D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\Browser.App.csproj]
 D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\CaptureService.cs(257,20): warning CsWinRT1032: Collection expressions targeting non mutable interface type 'System.Collections.Generic.IReadOnlyList<string>' do not have a defined concrete type, and are not supported for trimming and AOT compatibility with WinRT scenarios (consider changing the target type to be a concrete type, a mutable interface type, or add an explicit cast for either of these on the collection expression, eg. '(string[])["A", "B", "C"]') (https://github.com/microsoft/CsWinRT/tree/master/src/Authoring/WinRT.SourceGenerator/AnalyzerReleases.Shipped.md) [D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\Browser.App.csproj]
 D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\CaptureService.cs(268,63): warning CsWinRT1032: Collection expressions targeting non mutable interface type 'System.Collections.Generic.IReadOnlyList<string>' do not have a defined concrete type, and are not supported for trimming and AOT compatibility with WinRT scenarios (consider changing the target type to be a concrete type, a mutable interface type, or add an explicit cast for either of these on the collection expression, eg. '(string[])["A", "B", "C"]') (https://github.com/microsoft/CsWinRT/tree/master/src/Authoring/WinRT.SourceGenerator/AnalyzerReleases.Shipped.md) [D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\Browser.App.csproj]
+D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\WindowsBrowser.cs(136,57): warning CsWinRT1032: Collection expressions targeting non mutable interface type 'System.Collections.Generic.IEnumerable<string>' do not have a defined concrete type, and are not supported for trimming and AOT compatibility with WinRT scenarios (consider changing the target type to be a concrete type, a mutable interface type, or add an explicit cast for either of these on the collection expression, eg. '(string[])["A", "B", "C"]') (https://github.com/microsoft/CsWinRT/tree/master/src/Authoring/WinRT.SourceGenerator/AnalyzerReleases.Shipped.md) [D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\Browser.App.csproj]
+D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\ChatGptAccount.cs(125,35): warning CsWinRT1032: Collection expressions targeting non mutable interface type 'System.Collections.Generic.IEnumerable<(string Role, string Text)>' do not have a defined concrete type, and are not supported for trimming and AOT compatibility with WinRT scenarios (consider changing the target type to be a concrete type, a mutable interface type, or add an explicit cast for either of these on the collection expression, eg. '(string[])["A", "B", "C"]') (https://github.com/microsoft/CsWinRT/tree/master/src/Authoring/WinRT.SourceGenerator/AnalyzerReleases.Shipped.md) [D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\Browser.App.csproj]
 D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\MainWindow.xaml.cs(119,37): warning CsWinRT1032: Collection expressions targeting non mutable interface type 'System.Collections.Generic.IEnumerable<(string Id, Microsoft.Web.WebView2.Core.CoreWebView2? Core, bool Online)>' do not have a defined concrete type, and are not supported for trimming and AOT compatibility with WinRT scenarios (consider changing the target type to be a concrete type, a mutable interface type, or add an explicit cast for either of these on the collection expression, eg. '(string[])["A", "B", "C"]') (https://github.com/microsoft/CsWinRT/tree/master/src/Authoring/WinRT.SourceGenerator/AnalyzerReleases.Shipped.md) [D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\Browser.App.csproj]
   Browser.App -> D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\bin\x64\Release\net10.0-windows10.0.19041.0\win-x64\Sol.dll
 
@@ -145,14 +145,14 @@ Build succeeded.
 
 D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\DeviceFrame.cs(90,70): warning CsWinRT1032: Collection expressions targeting non mutable interface type 'System.Collections.Generic.IReadOnlyList<string>' do not have a defined concrete type, and are not supported for trimming and AOT compatibility with WinRT scenarios (consider changing the target type to be a concrete type, a mutable interface type, or add an explicit cast for either of these on the collection expression, eg. '(string[])["A", "B", "C"]') (https://github.com/microsoft/CsWinRT/tree/master/src/Authoring/WinRT.SourceGenerator/AnalyzerReleases.Shipped.md) [D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\Browser.App.csproj]
 D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\DeviceFrame.cs(70,5): warning CsWinRT1032: Collection expressions targeting non mutable interface type 'System.Collections.Generic.IReadOnlyList<Browser.App.Device>' do not have a defined concrete type, and are not supported for trimming and AOT compatibility with WinRT scenarios (consider changing the target type to be a concrete type, a mutable interface type, or add an explicit cast for either of these on the collection expression, eg. '(string[])["A", "B", "C"]') (https://github.com/microsoft/CsWinRT/tree/master/src/Authoring/WinRT.SourceGenerator/AnalyzerReleases.Shipped.md) [D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\Browser.App.csproj]
-D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\ChatGptAccount.cs(125,35): warning CsWinRT1032: Collection expressions targeting non mutable interface type 'System.Collections.Generic.IEnumerable<(string Role, string Text)>' do not have a defined concrete type, and are not supported for trimming and AOT compatibility with WinRT scenarios (consider changing the target type to be a concrete type, a mutable interface type, or add an explicit cast for either of these on the collection expression, eg. '(string[])["A", "B", "C"]') (https://github.com/microsoft/CsWinRT/tree/master/src/Authoring/WinRT.SourceGenerator/AnalyzerReleases.Shipped.md) [D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\Browser.App.csproj]
 D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\CaptureService.cs(188,84): warning CsWinRT1032: Collection expressions targeting non mutable interface type 'System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, Windows.Graphics.Imaging.BitmapTypedValue>>' do not have a defined concrete type, and are not supported for trimming and AOT compatibility with WinRT scenarios (consider changing the target type to be a concrete type, a mutable interface type, or add an explicit cast for either of these on the collection expression, eg. '(string[])["A", "B", "C"]') (https://github.com/microsoft/CsWinRT/tree/master/src/Authoring/WinRT.SourceGenerator/AnalyzerReleases.Shipped.md) [D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\Browser.App.csproj]
-D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\WindowsBrowser.cs(136,57): warning CsWinRT1032: Collection expressions targeting non mutable interface type 'System.Collections.Generic.IEnumerable<string>' do not have a defined concrete type, and are not supported for trimming and AOT compatibility with WinRT scenarios (consider changing the target type to be a concrete type, a mutable interface type, or add an explicit cast for either of these on the collection expression, eg. '(string[])["A", "B", "C"]') (https://github.com/microsoft/CsWinRT/tree/master/src/Authoring/WinRT.SourceGenerator/AnalyzerReleases.Shipped.md) [D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\Browser.App.csproj]
 D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\CaptureService.cs(257,20): warning CsWinRT1032: Collection expressions targeting non mutable interface type 'System.Collections.Generic.IReadOnlyList<string>' do not have a defined concrete type, and are not supported for trimming and AOT compatibility with WinRT scenarios (consider changing the target type to be a concrete type, a mutable interface type, or add an explicit cast for either of these on the collection expression, eg. '(string[])["A", "B", "C"]') (https://github.com/microsoft/CsWinRT/tree/master/src/Authoring/WinRT.SourceGenerator/AnalyzerReleases.Shipped.md) [D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\Browser.App.csproj]
 D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\CaptureService.cs(268,63): warning CsWinRT1032: Collection expressions targeting non mutable interface type 'System.Collections.Generic.IReadOnlyList<string>' do not have a defined concrete type, and are not supported for trimming and AOT compatibility with WinRT scenarios (consider changing the target type to be a concrete type, a mutable interface type, or add an explicit cast for either of these on the collection expression, eg. '(string[])["A", "B", "C"]') (https://github.com/microsoft/CsWinRT/tree/master/src/Authoring/WinRT.SourceGenerator/AnalyzerReleases.Shipped.md) [D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\Browser.App.csproj]
+D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\WindowsBrowser.cs(136,57): warning CsWinRT1032: Collection expressions targeting non mutable interface type 'System.Collections.Generic.IEnumerable<string>' do not have a defined concrete type, and are not supported for trimming and AOT compatibility with WinRT scenarios (consider changing the target type to be a concrete type, a mutable interface type, or add an explicit cast for either of these on the collection expression, eg. '(string[])["A", "B", "C"]') (https://github.com/microsoft/CsWinRT/tree/master/src/Authoring/WinRT.SourceGenerator/AnalyzerReleases.Shipped.md) [D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\Browser.App.csproj]
+D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\ChatGptAccount.cs(125,35): warning CsWinRT1032: Collection expressions targeting non mutable interface type 'System.Collections.Generic.IEnumerable<(string Role, string Text)>' do not have a defined concrete type, and are not supported for trimming and AOT compatibility with WinRT scenarios (consider changing the target type to be a concrete type, a mutable interface type, or add an explicit cast for either of these on the collection expression, eg. '(string[])["A", "B", "C"]') (https://github.com/microsoft/CsWinRT/tree/master/src/Authoring/WinRT.SourceGenerator/AnalyzerReleases.Shipped.md) [D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\Browser.App.csproj]
 D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\MainWindow.xaml.cs(119,37): warning CsWinRT1032: Collection expressions targeting non mutable interface type 'System.Collections.Generic.IEnumerable<(string Id, Microsoft.Web.WebView2.Core.CoreWebView2? Core, bool Online)>' do not have a defined concrete type, and are not supported for trimming and AOT compatibility with WinRT scenarios (consider changing the target type to be a concrete type, a mutable interface type, or add an explicit cast for either of these on the collection expression, eg. '(string[])["A", "B", "C"]') (https://github.com/microsoft/CsWinRT/tree/master/src/Authoring/WinRT.SourceGenerator/AnalyzerReleases.Shipped.md) [D:\a\sol-browser-custom\sol-browser-custom\src\Browser.App\Browser.App.csproj]
     8 Warning(s)
     0 Error(s)
 
-Time Elapsed 00:00:43.60
+Time Elapsed 00:00:53.29
 RESULT: SUCCESS
