@@ -1,0 +1,77 @@
+name: Build
+
+on:
+  push:
+    branches: ['**']
+    paths-ignore: ['docs/**', '**.md']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.repository == 'ShinyCheee/sol-browser-custom' && !startsWith(github.ref, 'refs/heads/ci-logs')
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Build, test
+        id: build
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP 'build.log'
+          $ok = $true
+          function Step($name, [scriptblock]$cmd) {
+            "===== $name =====" | Tee-Object -FilePath $log -Append
+            & $cmd 2>&1 | Tee-Object -FilePath $log -Append
+            if ($LASTEXITCODE -ne 0) { "!!!!! $name FAILED ($LASTEXITCODE)" | Tee-Object -FilePath $log -Append; $script:ok = $false }
+          }
+          Push-Location ui
+          Step 'npm ci' { npm ci --no-audit --no-fund }
+          if ($ok) { Step 'ui build' { npm run build } }
+          Pop-Location
+          if ($ok) { Step 'core tests' { dotnet test tests/Browser.Core.Tests -c Release --nologo -v m -tl:off } }
+          if ($ok) { Step 'app build x64' { dotnet build src/Browser.App/Browser.App.csproj -c Release -r win-x64 -p:Platform=x64 --nologo -v m -tl:off } }
+          "RESULT: $(if ($ok) { 'SUCCESS' } else { 'FAILURE' })" | Tee-Object -FilePath $log -Append
+          "ok=$ok" >> $env:GITHUB_OUTPUT
+
+      - name: Publish log to ci-logs branch
+        if: always()
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP 'build.log'
+          if (-not (Test-Path $log)) { 'no log' | Set-Content $log }
+          $sha = '${{ github.sha }}'
+          $dir = Join-Path $env:RUNNER_TEMP 'ci-logs'
+          git config --global user.name 'ci'
+          git config --global user.email 'ci@users.noreply.github.com'
+          git clone --depth 1 --branch ci-logs "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" $dir 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            New-Item -ItemType Directory -Force $dir | Out-Null
+            git -C $dir init -b ci-logs
+            git -C $dir remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          }
+          Copy-Item $log (Join-Path $dir "$sha.log")
+          Copy-Item $log (Join-Path $dir 'latest.log')
+          git -C $dir add -A
+          git -C $dir commit -m "log $sha"
+          git -C $dir push origin ci-logs
+
+      - name: Fail if build failed
+        if: steps.build.outputs.ok != 'True'
+        shell: pwsh
+        run: exit 1
