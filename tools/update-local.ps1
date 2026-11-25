@@ -39,7 +39,7 @@ if ($Test) {
 }
 
 Write-Host '==> Tests' -ForegroundColor Cyan
-dotnet test (Join-Path $root 'tests\Browser.Core.Tests') -c Release --nologo -v q
+dotnet test (Join-Path $root 'tests\Browser.Core.Tests') -c Release --nologo -v m -tl:off
 if ($LASTEXITCODE -ne 0) { throw 'Tests fehlgeschlagen, nichts installiert' }
 
 if (Get-Process -Name 'Sol' -ErrorAction SilentlyContinue) {
@@ -60,7 +60,7 @@ if (Test-Path $data) {
 Write-Host '==> Bauen und installieren' -ForegroundColor Cyan
 $staging = Join-Path $install 'app-new'
 if (Test-Path $staging) { Remove-Item $staging -Recurse -Force }
-dotnet publish $project -c Release -r win-x64 -p:Platform=x64 --self-contained true -p:PublishReadyToRun=true -o $staging --nologo -v q
+dotnet publish $project -c Release -r win-x64 -p:Platform=x64 --self-contained true -o $staging --nologo -v m -tl:off
 if ($LASTEXITCODE -ne 0) { throw 'Build fehlgeschlagen, alte Version bleibt' }
 foreach ($notice in 'LICENSE', 'THIRD-PARTY-NOTICES.md') {
     $file = Join-Path $root $notice
