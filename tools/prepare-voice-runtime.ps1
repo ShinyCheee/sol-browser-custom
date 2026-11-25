@@ -1,5 +1,7 @@
 param([string]$Destination = (Join-Path $PSScriptRoot '../bin/voice-runtime'))
 $ErrorActionPreference = 'Stop'
+# Ohne Fortschrittsbalken ist Invoke-WebRequest unter Windows PowerShell 5 um ein Vielfaches schneller.
+$ProgressPreference = 'SilentlyContinue'
 $env:PSModulePath = Join-Path $PSHOME 'Modules'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $destinationPath = [IO.Path]::GetFullPath($Destination)
@@ -14,6 +16,7 @@ function FetchVerified($url, $name, $hash) {
     $path = Join-Path $cache $name
     if ((Test-Path -LiteralPath $path) -and (Get-FileHash -LiteralPath $path).Hash -ne $hash) { Remove-Item -LiteralPath $path }
     if (-not (Test-Path -LiteralPath $path)) {
+        Write-Output "Sprach-Runtime: lade $name ..."
         Invoke-WebRequest -UseBasicParsing $url -OutFile ($path + '.part')
         if ((Get-FileHash -LiteralPath ($path + '.part')).Hash -ne $hash) { throw "Invalid voice runtime digest: $name" }
         Move-Item -LiteralPath ($path + '.part') -Destination $path -Force
