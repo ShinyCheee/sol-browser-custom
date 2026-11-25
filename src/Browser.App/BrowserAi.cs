@@ -21,7 +21,7 @@ public sealed partial class BrowserController
     private AgentTrace? _aiTrace;
     private (string Action, string Language, string Input)? _aiRequest; // dernière demande envoyée, pour la vue
     private const int AiLimit = 50_000;
-    private bool AiReady => !PrivateActive && _chatGpt.Ready;
+    private bool AiReady => Features.Ai && !PrivateActive && _chatGpt.Ready;
 
     // run : action lancée tout de suite depuis le menu contextuel, sans passer par le choix dans la vue.
     private async Task OpenPageAiAsync(string id, PageAiText? selected = null, string? run = null, string? tab = null)

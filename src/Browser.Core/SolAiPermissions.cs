@@ -23,7 +23,7 @@ public static class SolAiPermissions
         ".html", ".htm", ".php", ".asp", ".aspx", ".jsp",
     };
 
-    public static bool VoiceAvailable => true;
+    public static bool VoiceAvailable => Features.Ai;
 
     public static bool TrySet(Settings settings, string path, bool enabled)
     {

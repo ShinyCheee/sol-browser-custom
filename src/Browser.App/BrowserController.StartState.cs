@@ -175,7 +175,7 @@ public sealed partial class BrowserController
             activeId = _tabs.ActiveId,
             selectedTabIds = SelectedTabs().Select(t => t.Id),
             privateMode = PrivateActive,
-            aiAvailable = !PrivateActive, chatOpen = Chat?.IsOpen == true, aiTabs = TabGroupAiState(),
+            aiAvailable = Features.Ai && !PrivateActive, chatOpen = Chat?.IsOpen == true, aiTabs = TabGroupAiState(),
             shield = false,
             shortcuts = _settings.Shortcuts.Select(s => new { url = s.Url, name = s.Name, icon = s.Icon, tabId = _shortcutTabs.GetValueOrDefault(s) }),
             extensions = _pinnedExtensions,

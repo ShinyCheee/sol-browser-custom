@@ -18,6 +18,8 @@ public sealed partial class BrowserController
 
     private bool ChatCommand(Command c)
     {
+        // Sol AI ist in diesem Fork ausgeschaltet: Chat- und Sprachbefehle werden ignoriert.
+        if (!Features.Ai && (c.Type.StartsWith("chat.", StringComparison.Ordinal) || c.Type.StartsWith("voice.", StringComparison.Ordinal))) return true;
         if (VoiceCommand(c) || ChatAttachmentCommand(c)) return true;
         switch (c.Type)
         {

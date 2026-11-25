@@ -21,6 +21,7 @@ import {
   type NetworkReq,
 } from './NetworkTable';
 import SolTabs from './SolTabs';
+import { AI_ENABLED } from './features';
 
 type Filter = 'all' | 'api' | 'errors';
 
@@ -110,7 +111,7 @@ export default function Panel() {
     <Card size="compact" className="sol-surface-card net">
       <header className="net-bar">
         <span className="net-title">{t('Outils dev', 'Dev tools')}</span>
-        <Button
+        {AI_ENABLED && <Button
           variant="ghost"
           size="sm"
           whileHover={undefined}
@@ -122,7 +123,7 @@ export default function Panel() {
           onClick={() => send({ type: 'chat.toggle', id: 'developer' })}
         >
           Sol AI
-        </Button>
+        </Button>}
         <SolTabs
           className="net-filters"
           value={mode}

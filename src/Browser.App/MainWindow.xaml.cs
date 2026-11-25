@@ -172,6 +172,7 @@ public sealed partial class MainWindow : Window
             Win32Interop.UnregisterHotKey(_hwnd, i);
             if (!active || !ready) continue;
             if (_controller!.UseNativeZoom && Shortcuts[i].Action.StartsWith("zoom.", StringComparison.Ordinal)) continue;
+            if (!Features.Ai && Shortcuts[i].Action.StartsWith("voice.", StringComparison.Ordinal)) continue;
             if (mediaCall && Shortcuts[i].Modifiers == 2 && Shortcuts[i].Key is 0x44 or 0x4D) continue;
             Win32Interop.RegisterHotKey(_hwnd, i, Shortcuts[i].Modifiers | 0x4000 /* MOD_NOREPEAT */, Shortcuts[i].Key);
         }
@@ -181,6 +182,7 @@ public sealed partial class MainWindow : Window
     private void RunShortcut(string action)
     {
         if (action == "sidebar.toggle") { _sidebar?.Toggle(); return; }
+        if (!Features.Ai && action.StartsWith("voice.", StringComparison.Ordinal)) return;
         _controller?.Shortcut(action);
     }
 

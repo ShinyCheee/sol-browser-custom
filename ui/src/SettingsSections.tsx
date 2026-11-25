@@ -7,6 +7,7 @@ import SettingsCloud from './SettingsCloud';
 import { SiteData } from './SettingsFields';
 import SettingToggle from './SettingToggle';
 import SolAiAccount from './SolAiAccount';
+import { AI_ENABLED } from './features';
 
 type SettingsContent = Extract<Content, { popup: 'settings' }>;
 
@@ -94,7 +95,7 @@ export function SettingsPopupList({
         </Button>
       </div>
 
-      {settingsSection === 'about' && <SolAiAccount ai={content.ai} />}
+      {AI_ENABLED && settingsSection === 'about' && <SolAiAccount ai={content.ai} />}
 
       <div className="setting-row static" hidden={settingsSection !== 'about'}>
         <span className="setting-text">

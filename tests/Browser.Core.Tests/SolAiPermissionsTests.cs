@@ -18,7 +18,7 @@ public sealed class SolAiPermissionsTests : IDisposable
     {
         var settings = new Settings();
         Assert.False(settings.SolAiAutoApproveActions);
-        Assert.True(SolAiPermissions.VoiceAvailable);
+        Assert.Equal(Features.Ai, SolAiPermissions.VoiceAvailable);
         foreach (var tool in new[] { "click", "fill", "navigate", "select_option", "set_checked", "fill_form", "press_key", "close_tabs", "browser_history" })
             Assert.True(SolAiPermissions.RequiresApproval(tool, settings));
         Assert.False(SolAiPermissions.RequiresApproval("read_page", settings));

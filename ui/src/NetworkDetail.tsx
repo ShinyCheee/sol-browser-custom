@@ -5,6 +5,7 @@ import { t } from './i18n';
 import { Icon } from './Icons';
 import { toCurl } from './networkFormat';
 import SolTabs from './SolTabs';
+import { AI_ENABLED } from './features';
 
 export type Detail = {
   tabId: string;
@@ -63,7 +64,7 @@ export function DetailPane({
         </Button>
       </div>
       <div className="net-detail-actions">
-        <Button
+        {AI_ENABLED && <Button
           variant="ghost"
           size="sm"
           whileHover={undefined}
@@ -84,7 +85,7 @@ export function DetailPane({
           }
         >
           {t('Expliquer avec ChatGPT', 'Explain with ChatGPT')}
-        </Button>
+        </Button>}
         <Button variant="ghost" size="sm" whileHover={undefined} className="pill-action net-edit" onClick={onEdit}>
           <Icon name="edit" size={14} />
           {t('Modifier et renvoyer', 'Edit and resend')}

@@ -3,6 +3,7 @@ import { send } from './bridge';
 import { t } from './i18n';
 import type { NetworkTools } from './NetworkComposer';
 import { DetailPane, type Detail } from './NetworkDetail';
+import { AI_ENABLED } from './features';
 
 export type NetworkReq = {
   id: string;
@@ -61,7 +62,7 @@ export function NetworkConsole({
           <pre className={`net-body console-${line.level}`}>
             {line.level} · {line.text}
           </pre>
-          <Button
+          {AI_ENABLED && <Button
             variant="ghost"
             size="sm"
             whileHover={undefined}
@@ -82,7 +83,7 @@ export function NetworkConsole({
             }
           >
             {t('Expliquer avec ChatGPT', 'Explain with ChatGPT')}
-          </Button>
+          </Button>}
         </div>
       ))}
     </div>

@@ -127,7 +127,7 @@ public sealed partial class BrowserController
         spellingLanguages = _pages.SpellingLanguages,
         spellingOnline = _settings.SpellingOnline,
         cloud = AppPaths.Private ? null : CloudJson(),
-        shortcuts = BrowserShortcuts.All.GroupBy(s => s.Action).Select(g => new
+        shortcuts = BrowserShortcuts.All.Where(s => Features.Ai || !s.Action.StartsWith("voice.", StringComparison.Ordinal)).GroupBy(s => s.Action).Select(g => new
         {
             action = g.Key, title = T(g.First().French, g.First().English),
             keys = string.Join(" / ", g.Select(s => s.Text(Language.Current == "en")).Distinct()),
