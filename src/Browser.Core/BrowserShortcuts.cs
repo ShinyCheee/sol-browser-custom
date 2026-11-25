@@ -46,6 +46,7 @@ public static class BrowserShortcuts
         new(0x41,6,"profile.menu","Espaces et profils","Spaces and profiles","A"),
         new(0x42,6,"session.menu","Session de cet onglet","Tab session","B"),
         new(0x7A,0,"window.maximize","Plein écran","Full screen","F11"),
+        new(0x53,2,"sidebar.toggle","Afficher ou masquer la barre latérale","Show or hide sidebar","S"),
         new(0x4C,2,"address.focus","Barre d’adresse","Address bar","L"),
         new(0x52,2,"nav.reload","Recharger la page","Reload page","R"),
         new(0x74,0,"nav.reload","Recharger la page","Reload page","F5"),

@@ -119,7 +119,7 @@ public sealed partial class MainWindow : Window
         pages.SpellingViews = () => [("ui.chat", chat.IsOpen ? Chat.CoreWebView2 : null, true), ("ui.sidebar", Ui.CoreWebView2, false)];
         _controller = new BrowserController(this, pages, bridge, popup, dock, panel, welcome, settings)
         {
-            ExtensionPopup = new ExtensionPopupHost(this, s => { if (_controller is { IsReady: true }) _controller.Shortcut(s); }),
+            ExtensionPopup = new ExtensionPopupHost(this, s => { if (_controller is { IsReady: true }) RunShortcut(s); }),
             CapturePanel = capture,
             Chat = chat,
         };
@@ -177,6 +177,13 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    // Actions gérées par la fenêtre elle-même avant de passer au contrôleur.
+    private void RunShortcut(string action)
+    {
+        if (action == "sidebar.toggle") { _sidebar?.Toggle(); return; }
+        _controller?.Shortcut(action);
+    }
+
     private nint WndProc(nint hwnd, uint msg, nint wParam, nint lParam, nuint id, nuint data)
     {
         if (msg == 0x0312 /* WM_HOTKEY */ && wParam >= 0 && wParam < Shortcuts.Count)
@@ -184,7 +191,7 @@ public sealed partial class MainWindow : Window
             if (_controller is not { IsReady: true }) return 0;
             var action = Shortcuts[(int)wParam].Action;
             if (action == "address.focus") Ui.Focus(FocusState.Programmatic);
-            _controller.Shortcut(action);
+            RunShortcut(action);
             return 0;
         }
         return Win32Interop.DefSubclassProc(hwnd, msg, wParam, lParam);
