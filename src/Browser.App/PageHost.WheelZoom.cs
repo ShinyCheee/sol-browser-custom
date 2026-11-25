@@ -17,7 +17,7 @@ public sealed partial class PageHost
             var signal = e.TryGetWebMessageAsString();
             if (DebugLog.Enabled && signal.StartsWith("sol.wheeldbg:" + FanKey + ":", StringComparison.Ordinal))
             {
-                DebugLog.Write($"page.wheel {signal["sol.wheeldbg:".Length + FanKey.Length + 1..]}");
+                DebugLog.Write($"page.wheel {signal[("sol.wheeldbg:".Length + FanKey.Length + 1)..]}");
                 return;
             }
             if (signal != prefix + "in" && signal != prefix + "out") return;
