@@ -139,6 +139,16 @@ public sealed partial class UiBridge(WebView2 view, string page = "index.html", 
             };
 
             BindCommands(target, core, onCommand);
+            if (DebugLog.Enabled)
+            {
+                // Diagnose: meldet, wenn diese Interface-Ansicht (Leiste, Menü, Einstellungen …) ein Mausrad-Ereignis erhält.
+                await core.AddScriptToExecuteOnDocumentCreatedAsync(
+                    "(() => { let last = 0; addEventListener('wheel', () => { const now = performance.now(); if (now - last < 150) return; last = now; chrome.webview.postMessage('sol.uiwheel'); }, { capture: true, passive: true }); })();");
+                core.WebMessageReceived += (_, e) =>
+                {
+                    if (e.WebMessageAsJson == "\"sol.uiwheel\"") DebugLog.Write($"ui.wheel view={target.Name} page={targetPage}");
+                };
+            }
 
             core.Navigate(Origin + targetPage);
             await Task.WhenAny(loaded.Task, Task.Delay(3000));

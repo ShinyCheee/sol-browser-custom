@@ -84,6 +84,9 @@ public sealed partial class MainWindow
 
     private void WireGestures()
     {
+        if (DebugLog.Enabled)
+            Microsoft.UI.Xaml.Input.FocusManager.GotFocus += (_, e) =>
+                DebugLog.Write($"focus.got {(e.NewFocusedElement as FrameworkElement)?.Name ?? e.NewFocusedElement?.GetType().Name}");
         // handledEventsToo : les vues web marquent ces événements comme traités, on les observe quand même.
         Root.AddHandler(UIElement.PointerPressedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler((_, e) =>
         {
@@ -100,6 +103,12 @@ public sealed partial class MainWindow
             // Les gestes de navigation et de zoom ne concernent que les pages, jamais les panneaux de Sol.
             var point = e.GetCurrentPoint(Pages).Position;
             // Diagnose (nur mit NAVIGATEUR_DEBUG=1): kommt das Mausrad überhaupt bei Sol an, und bei welchem Element?
+            if (DebugLog.Enabled)
+            {
+                var under = Microsoft.UI.Xaml.Media.VisualTreeHelper.FindElementsInHostCoordinates(e.GetCurrentPoint(null).Position, Root)
+                    .OfType<WebView2>().FirstOrDefault();
+                DebugLog.Write($"wheel.under view={under?.Name ?? "-"} src={under?.Source}");
+            }
             DebugLog.Write($"wheel src={(e.OriginalSource as FrameworkElement)?.Name ?? e.OriginalSource?.GetType().Name} handled={e.Handled} delta={e.GetCurrentPoint(Root).Properties.MouseWheelDelta} at={point.X:0},{point.Y:0} popup={PopupFrame.Visibility} focus={(Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(Content.XamlRoot) as FrameworkElement)?.Name}");
             if (PopupFrame.Visibility == Visibility.Visible || CaptureFrame.Visibility == Visibility.Visible ||
                 point.X < 0 || point.Y < 0 || point.X >= Pages.ActualWidth || point.Y >= Pages.ActualHeight) return;
