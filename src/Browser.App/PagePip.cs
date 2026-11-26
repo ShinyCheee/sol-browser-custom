@@ -8,6 +8,7 @@ namespace Browser.App;
 public sealed partial class PageHost
 {
     private string? _pip;
+    private string? _pipHandoff;
     private int _pipContext, _pipGeneration, _latestPipAttempt;
     private readonly SemaphoreSlim _pipOpening = new(1, 1);
     private DispatcherTimer? _pipTimer;
@@ -55,6 +56,9 @@ public sealed partial class PageHost
         var attempt = ++_latestPipAttempt;
         var generation = _pipGeneration;
         bool CanOpen() => generation == _pipGeneration && !_visible.Contains(id) && Core(id) == core && _pip != id;
+        // Spielt die Seite gerade Ton ab, bleibt sie während des Versuchs unter dem neuen Tab sichtbar (siehe ApplyLayout).
+        try { _pipHandoff = core.IsDocumentPlayingAudio ? id : null; }
+        catch (Exception e) when (e is InvalidOperationException or COMException) { }
 
         // L'ouverture native prend du temps. Les navigations suivantes ne doivent pas annuler le lecteur déjà en cours d'ouverture.
         // Une seule demande parle au moteur à la fois ; parmi celles en attente, seule la plus récente reste utile.
@@ -91,8 +95,19 @@ public sealed partial class PageHost
         }
         catch (Exception e) when (e is InvalidOperationException or COMException or JsonException or ArgumentException)
         { DebugLog.Write($"pip.unavailable {id} {e.GetType().Name}"); }
-        finally { _pipOpening.Release(); }
+        finally
+        {
+            _pipOpening.Release();
+            EndPipHandoff(id);
+        }
         return false;
+    }
+
+    private void EndPipHandoff(string id)
+    {
+        if (_pipHandoff != id) return;
+        _pipHandoff = null;
+        ApplyLayout(_layout.Primary, _layout.Secondary, _layout.Ratio);
     }
 
     public async void ExitPip()

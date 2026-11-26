@@ -147,8 +147,14 @@ public sealed partial class PageHost
         foreach (var (id, view) in _views)
         {
             var column = id == activeId ? 0 : split && id == secondaryId ? 2 : -1;
-            view.Visibility = column < 0 ? Visibility.Collapsed : Visibility.Visible;
+            // Lecteur flottant: Die verlassene Seite bleibt kurz sichtbar, aber unter dem neuen Tab, bis das Video im
+            // Bild-im-Bild-Fenster ist. Eine bereits versteckte Seite lehnt den Wechsel in den Mini-Player oft ab.
+            var handoff = column < 0 && id == _pipHandoff;
+            view.Visibility = column < 0 && !handoff ? Visibility.Collapsed : Visibility.Visible;
+            Canvas.SetZIndex(view, handoff ? -1 : 0);
+            if (handoff) Grid.SetColumn(view, 0);
             if (column >= 0) Grid.SetColumn(view, column);
+            if (handoff) continue;
             Rest(id, view, hidden: column < 0);
             // Coques et vues miroirs d'un onglet simulé : mêmes colonne et visibilité que sa vue.
             foreach (var sim in _sims.GetValueOrDefault(id, []))
